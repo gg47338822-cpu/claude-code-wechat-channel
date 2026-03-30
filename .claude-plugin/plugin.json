@@ -1,14 +1,5 @@
 {
   "name": "wechat",
-  "version": "1.0.0",
-  "description": "WeChat messaging bridge for Claude Code. Send and receive WeChat messages directly in your Claude Code session.",
-  "author": { "name": "Jason Lee" },
-  "license": "MIT",
-  "channels": [
-    {
-      "server": "wechat",
-      "userConfig": {}
-    }
-  ],
-  "skills": "../skills/"
+  "description": "WeChat messaging bridge for Claude Code — send and receive WeChat messages directly in your session.",
+  "version": "1.0.0"
 }
