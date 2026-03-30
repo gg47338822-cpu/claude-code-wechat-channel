@@ -1,149 +1,72 @@
 # wechat-channel
 
-WeChat messaging bridge for Claude Code. Send and receive WeChat messages directly in your Claude Code session.
+把微信接入 Claude Code。朋友在微信里给你发消息，Claude 帮你回复。
 
-## Features
-
-- **Multi-instance** — Run multiple WeChat accounts simultaneously, each with its own profile
-- **Memory system** — Persistent memory across sessions, each profile remembers past conversations
-- **Media support** — Auto-download images, videos, files; send images and files back
-- **Auto re-login** — Token expiry triggers QR code re-authentication automatically
-- **Group chat** — Full support for group messages with sender identification
-- **Markdown stripping** — Converts markdown to plain text for WeChat display
-- **Long message chunking** — Splits long replies into multiple messages
-
-## Quick Start
-
-### 1. Install
+## 安装
 
 ```bash
-npm install -g claude-code-wechat-channel
+npm install -g @xiaoyifu_0000/wechat-channel
 ```
 
-### 2. Run
+## 使用
+
+### 首次设置
 
 ```bash
 wechat-channel
 ```
 
-That's it. This launches Claude Code with the plugin loaded. On first run, Claude will guide you through setup in a friendly conversation:
+1. 浏览器弹出二维码，用微信扫码
+2. 扫完后用微信给 bot 发一条消息
+3. Claude 在微信里跟你聊几句，完成身份和规则配置
+4. 搞定，以后有人发微信 Claude 就会回复
 
-1. Ask what role you want Claude to play on WeChat
-2. Ask where to store conversation memory
-3. Ask if you want to whitelist specific contacts
-4. Save the configuration
-5. Open a QR code for you to scan with WeChat
-6. Start listening for messages
-
-### Development Setup
-
-If you're working on the plugin itself:
+### 添加更多微信号
 
 ```bash
-git clone <repo-url> && cd wechat-channel-v2
-npm install && npm run build
-claude --plugin-dir .
+wechat-channel new work     # 给新号起个名字
+wechat-channel new 妈妈     # 中文也行
 ```
 
-## Multi-Instance Setup
+每个微信号独立配置身份、规则、白名单。
 
-Each WeChat account is a "profile". Profiles are stored in:
-
-```
-~/.claude/channels/wechat/profiles/<name>/
-```
-
-### Profile structure
-
-```
-~/.claude/channels/wechat/profiles/home/
-  account.json    — Login credentials (auto-generated after QR scan)
-  profile.json    — Configuration (see below)
-  memory/         — Conversation memory files
-  media/          — Downloaded media (auto-cleaned after 7 days)
-```
-
-### profile.json example
-
-```json
-{
-  "identity": "You are Jason's personal assistant. You speak Chinese. You are warm, helpful, and concise.",
-  "rules": "Never share private information. Always respond in Chinese unless the user writes in English.",
-  "workdir": "/Users/jason/Documents/my-project",
-  "allow_from": ["jason", "friend123"]
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `identity` | Who Claude should be when replying via this profile |
-| `rules` | Behavioral rules Claude must follow |
-| `workdir` | Working directory for this Claude instance |
-| `allow_from` | Whitelist of WeChat IDs that can send messages (empty = allow all) |
-
-### Launch multiple profiles
+### 启动所有微信号
 
 ```bash
-# All profiles
-npx tsx launcher.ts
-
-# Specific profiles
-npx tsx launcher.ts home legal shuji
+wechat-channel
 ```
 
-The launcher discovers profiles automatically from the profiles directory.
+一条命令启动所有已配置的微信号。
 
-## Available Tools
+## 前提条件
 
-When the plugin is loaded, these MCP tools become available:
+- [Claude Code](https://docs.anthropic.com/claude-code) 已安装并登录
+- Node.js >= 18
+- 微信 iOS 最新版（需支持 iLink Bot）
 
-| Tool | Description |
-|------|-------------|
-| `wechat_reply` | Send a plain-text reply to a WeChat user or group |
-| `wechat_send_image` | Send a local image file (PNG, JPG) |
-| `wechat_send_file` | Send a local file (documents, PDFs, etc., max 20MB) |
-| `wechat_login` | Start QR code login flow |
-| `wechat_status` | Check connection status |
+## 功能
 
-## Skills
+- **多实例** — 同时运行多个微信号，各有各的身份和规则
+- **记忆系统** — 每个微信号有独立的对话记忆，重启不丢
+- **媒体支持** — 自动下载图片/视频/文件，也能发图发文件
+- **自动重登** — Token 过期自动弹二维码重新扫
+- **群聊** — 支持群消息，能识别发送者
+- **长消息分块** — 超长回复自动分成多条
 
-| Command | Description |
-|---------|-------------|
-| `/access` | Connect or reconnect a WeChat account |
-| `/access status` | Check current connection status |
+## 常见问题
 
-## Architecture
+### 消息收不到
+- 检查微信是否是最新版
+- 检查 Claude Code 终端是否还在运行
+- 重新扫码：在 Claude Code 里输入 `/access`
 
-```
-server.ts          — MCP Server entry point (tools + main)
-launcher.ts        — Multi-instance launcher
-src/
-  polling.ts       — Message polling loop
-  message.ts       — Message parsing and sending
-  login.ts         — QR code login flows
-  profile.ts       — Profile management
-  state.ts         — Session state (context tokens, typing)
-  cdn.ts           — Media download/upload
-  api.ts           — HTTP client
-  crypto.ts        — AES decryption
-  types.ts         — TypeScript types and constants
-```
+### Token 过期
+系统会自动检测并弹出重新扫码页面。如果没有自动弹，手动运行 `/access`。
 
-## Troubleshooting
-
-### "Another channel process is running"
-A previous instance didn't shut down cleanly. Delete the PID file:
+### 删除某个微信号
 ```bash
-rm ~/.claude/channels/wechat/profiles/<name>/channel.pid
+rm -rf ~/.claude/channels/wechat/profiles/<名字>
 ```
-
-### Messages not arriving
-1. Check `/access status` — is it logged in?
-2. Check `allow_from` in profile.json — is the sender whitelisted?
-3. Check if paused — delete `~/.claude/channels/wechat/profiles/<name>/paused` if it exists
-
-### Token expired
-The system auto-detects token expiry and opens a QR code page. If it doesn't, run `/access` manually.
 
 ## License
 
