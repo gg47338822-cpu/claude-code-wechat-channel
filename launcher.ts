@@ -126,6 +126,16 @@ function main() {
   // No profiles yet — launch Claude Code for first-time setup
   if (allProfiles.length === 0) {
     log("首次启动，进入引导模式...");
+
+    // Write a temp MCP config with absolute path to server.js
+    const serverJs = path.join(PLUGIN_ROOT, "dist", "server.js");
+    const tmpMcpConfig = path.join(PLUGIN_ROOT, ".mcp-resolved.json");
+    fs.writeFileSync(tmpMcpConfig, JSON.stringify({
+      mcpServers: {
+        wechat: { command: "node", args: [serverJs] },
+      },
+    }));
+
     const setupPrompt = [
       "你正在帮用户设置微信 Channel 插件。用中文，友好地一步步引导。",
       "",
@@ -142,7 +152,7 @@ function main() {
       "现在开始第 1 步。",
     ].join("\n");
     const proc = spawn(claudePath, [
-      "--plugin-dir", PLUGIN_ROOT,
+      "--mcp-config", tmpMcpConfig,
       "--dangerously-skip-permissions",
       "--append-system-prompt", setupPrompt,
       "开始设置微信",
