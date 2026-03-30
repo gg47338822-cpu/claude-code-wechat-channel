@@ -85,14 +85,17 @@ function startProfile(profileName: string, claudePath: string): ChildProcess {
     delete cleanEnv[k];
   }
 
+  const mcpConfig = path.join(PLUGIN_ROOT, ".mcp.json");
   const proc = spawn(claudePath, [
-    "--plugin-dir", PLUGIN_ROOT,
+    "--mcp-config", mcpConfig,
+    "--dangerously-load-development-channels", "server:wechat",
     "--dangerously-skip-permissions",
   ], {
     cwd: workdir,
     env: {
       ...cleanEnv,
       WECHAT_CHANNEL_PROFILE: profileName,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
       CLAUDE_ROLE: profileName,
       ...(profileName !== "home" ? { CLAUDE_SANDBOX: "true" } : {}),
     },
@@ -138,8 +141,10 @@ function main() {
       "",
       "现在开始第 1 步。",
     ].join("\n");
+    const mcpConfig = path.join(PLUGIN_ROOT, ".mcp.json");
     const proc = spawn(claudePath, [
-      "--plugin-dir", PLUGIN_ROOT,
+      "--mcp-config", mcpConfig,
+      "--dangerously-load-development-channels", "server:wechat",
       "--dangerously-skip-permissions",
       "--append-system-prompt", setupPrompt,
       "开始设置微信",
@@ -148,6 +153,7 @@ function main() {
       env: {
         ...process.env,
         WECHAT_CHANNEL_PROFILE: "default",
+        CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
       },
     });
     proc.on("exit", (code) => process.exit(code ?? 0));
