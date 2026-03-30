@@ -37,6 +37,14 @@ wechat-channel              # 启动所有微信号
 wechat-channel run work     # 只启动某一个
 ```
 
+或者手动启动（推荐，更稳定）：
+
+```bash
+claude --dangerously-load-development-channels server:wechat
+```
+
+在有 `.mcp.json` 的目录下运行。首次设置完成后，`.mcp.json` 会自动生成在 `~/.claude/channels/wechat/` 目录。
+
 ## 前提条件
 
 - [Claude Code](https://docs.anthropic.com/claude-code) 已安装并登录
