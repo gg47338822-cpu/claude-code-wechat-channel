@@ -89,7 +89,7 @@ function startProfile(profileName: string, claudePath: string): ChildProcess {
   const proc = spawn(claudePath, [
     "--mcp-config", mcpConfig,
     "--dangerously-load-development-channels", "server:wechat",
-    "--dangerously-skip-permissions",
+    "--permission-mode", "bypassPermissions",
   ], {
     cwd: workdir,
     env: {
@@ -145,7 +145,7 @@ function main() {
     const proc = spawn(claudePath, [
       "--mcp-config", mcpConfig,
       "--dangerously-load-development-channels", "server:wechat",
-      "--dangerously-skip-permissions",
+      "--permission-mode", "bypassPermissions",
       "--append-system-prompt", setupPrompt,
       "开始设置微信",
     ], {
