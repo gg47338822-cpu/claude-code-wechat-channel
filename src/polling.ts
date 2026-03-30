@@ -175,11 +175,12 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
 
         // Cache context token
         const contextKey = groupId ?? senderId;
+        log(`context_token: ${msg.context_token ? "有(" + msg.context_token.slice(0, 20) + "...)" : "无"} key=${contextKey}`);
         if (msg.context_token) {
           contextTokens.set(contextKey, msg.context_token);
           if (isGroup) contextTokens.set(senderId, msg.context_token);
         } else {
-          log(`消息缺少 context_token: from=${senderId} — 无法回复，等待下一条`);
+          log(`消息缺少 context_token: from=${senderId}`);
         }
 
         const canReply = Boolean(contextTokens.get(contextKey));

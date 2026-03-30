@@ -42,7 +42,16 @@ export class ContextTokenCache {
   }
 
   get(key: string): string | undefined {
-    return this.cache.get(key);
+    const exact = this.cache.get(key);
+    if (exact) return exact;
+    // Fallback: return most recent token if exact key doesn't match.
+    // Needed because sender_id format may differ between message receipt and tool call.
+    if (this.cache.size > 0) {
+      let last: string | undefined;
+      for (const v of this.cache.values()) last = v;
+      return last;
+    }
+    return undefined;
   }
 
   clear(): void {
