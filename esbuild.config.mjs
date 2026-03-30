@@ -28,6 +28,9 @@ if (cmd === "start") {
 } else if (cmd === "new") {
   process.env.WECHAT_SETUP_NEW = process.argv[3] || "";
   import("./launcher.js");
+} else if (cmd === "run") {
+  process.env.WECHAT_RUN_PROFILE = process.argv[3] || "";
+  import("./launcher.js");
 } else {
   import("./launcher.js");
 }

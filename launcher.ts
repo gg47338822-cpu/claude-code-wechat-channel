@@ -114,13 +114,27 @@ function main() {
     return;
   }
 
-  // ── Normal mode: launch profiles ──
-  const profilesToStart = args.length > 0
-    ? args.filter((name) => {
-        if (!allProfiles.includes(name)) { logError(`profile "${name}" 不存在，跳过`); return false; }
-        return true;
-      })
-    : allProfiles;
+  // ── Run single profile: "wechat-channel run work" ──
+  const runProfile = process.env.WECHAT_RUN_PROFILE;
+  if (runProfile !== undefined) {
+    const name = runProfile;
+    if (!name || !allProfiles.includes(name)) {
+      logError(`profile "${name}" 不存在。可用: ${allProfiles.join(", ")}`);
+      process.exit(1);
+    }
+    log(`启动 profile: ${name}`);
+    const config = loadProfileConfig(name);
+    const workdir = config.workdir || process.cwd();
+    const proc = launchClaude(claudePath, workdir, {
+      WECHAT_CHANNEL_PROFILE: name,
+      CLAUDE_ROLE: name,
+    });
+    proc.on("exit", (code) => process.exit(code ?? 0));
+    return;
+  }
+
+  // ── Normal mode: launch all profiles ──
+  const profilesToStart = allProfiles;
 
   if (profilesToStart.length === 0) { logError("没有可启动的 profile"); process.exit(1); }
 

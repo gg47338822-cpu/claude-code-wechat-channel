@@ -30,13 +30,12 @@ wechat-channel new 妈妈     # 中文也行
 
 每个微信号独立配置身份、规则、白名单。
 
-### 启动所有微信号
+### 启动
 
 ```bash
-wechat-channel
+wechat-channel              # 启动所有微信号
+wechat-channel run work     # 只启动某一个
 ```
-
-一条命令启动所有已配置的微信号。
 
 ## 前提条件
 
