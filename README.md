@@ -8,9 +8,7 @@
 npm install -g @xiaoyifu_0000/wechat-channel
 ```
 
-## 使用
-
-### 首次设置
+## 首次设置
 
 ```bash
 wechat-channel
@@ -19,7 +17,7 @@ wechat-channel
 1. 浏览器弹出二维码，用微信扫码
 2. 扫完后用微信给 bot 发一条消息
 3. Claude 在微信里跟你聊几句，完成身份和规则配置
-4. 搞定，以后有人发微信 Claude 就会回复
+4. 搞定
 
 ### 添加更多微信号
 
@@ -30,20 +28,22 @@ wechat-channel new 妈妈     # 中文也行
 
 每个微信号独立配置身份、规则、白名单。
 
-### 启动
+## 日常启动
 
-```bash
-wechat-channel              # 启动所有微信号
-wechat-channel run work     # 只启动某一个
-```
-
-或者手动启动（推荐，更稳定）：
+设置完成后，每次启动微信 bot 用这个命令：
 
 ```bash
 claude --dangerously-load-development-channels server:wechat
 ```
 
-在有 `.mcp.json` 的目录下运行。首次设置完成后，`.mcp.json` 会自动生成在 `~/.claude/channels/wechat/` 目录。
+在 `~/.claude/channels/wechat/` 目录下运行（首次设置后自动生成 `.mcp.json`）。
+
+如果有多个微信号，指定 profile：
+
+```bash
+cd ~/.claude/channels/wechat
+WECHAT_CHANNEL_PROFILE=work claude --dangerously-load-development-channels server:wechat
+```
 
 ## 前提条件
 
