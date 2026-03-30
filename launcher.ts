@@ -79,6 +79,15 @@ function startProfile(profileName: string, claudePath: string): ChildProcess {
   const config = loadProfileConfig(profileName);
   const workdir = config.workdir || process.cwd();
 
+  // Generate resolved MCP config with absolute path
+  const serverJs = path.join(PLUGIN_ROOT, "dist", "server.js");
+  const tmpMcpConfig = path.join(PLUGIN_ROOT, `.mcp-resolved-${profileName}.json`);
+  fs.writeFileSync(tmpMcpConfig, JSON.stringify({
+    mcpServers: {
+      wechat: { command: "node", args: [serverJs] },
+    },
+  }));
+
   // Strip proxy env vars — WeChat API must go direct
   const cleanEnv = { ...process.env };
   for (const k of ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"]) {
@@ -87,6 +96,7 @@ function startProfile(profileName: string, claudePath: string): ChildProcess {
 
   const proc = spawn(claudePath, [
     "--plugin-dir", PLUGIN_ROOT,
+    "--mcp-config", tmpMcpConfig,
     "--dangerously-skip-permissions",
   ], {
     cwd: workdir,
@@ -123,6 +133,16 @@ function main() {
   if (allProfiles.length === 0) {
     log("首次启动，进入引导模式...");
 
+    // Generate resolved MCP config with absolute paths
+    // (${CLAUDE_PLUGIN_ROOT} substitution in .mcp.json is unreliable)
+    const serverJs = path.join(PLUGIN_ROOT, "dist", "server.js");
+    const tmpMcpConfig = path.join(PLUGIN_ROOT, ".mcp-resolved.json");
+    fs.writeFileSync(tmpMcpConfig, JSON.stringify({
+      mcpServers: {
+        wechat: { command: "node", args: [serverJs] },
+      },
+    }));
+
     const setupPrompt = [
       "你正在帮用户设置微信 Channel 插件。用中文，友好地一步步引导。",
       "",
@@ -140,6 +160,7 @@ function main() {
     ].join("\n");
     const proc = spawn(claudePath, [
       "--plugin-dir", PLUGIN_ROOT,
+      "--mcp-config", tmpMcpConfig,
       "--dangerously-skip-permissions",
       "--append-system-prompt", setupPrompt,
       "开始设置微信",
