@@ -56,14 +56,13 @@ function loadProfileConfig(profileName: string): { workdir?: string } {
 
 /**
  * Write .mcp.json into a directory so Claude Code auto-discovers the wechat MCP server.
- * Uses absolute path to dist/server.js — no variable substitution needed.
+ * Uses npx to resolve the package — works after npm install -g.
  */
 function ensureMcpConfig(dir: string): void {
   const mcpFile = path.join(dir, ".mcp.json");
-  const serverJs = path.join(PLUGIN_ROOT, "dist", "server.js");
   const config = {
     mcpServers: {
-      wechat: { command: "node", args: [serverJs] },
+      wechat: { command: "npx", args: ["-y", "@xiaoyifu_0000/wechat-channel", "start"] },
     },
   };
   fs.mkdirSync(dir, { recursive: true });
@@ -76,18 +75,15 @@ function launchClaude(claudePath: string, cwd: string, env: Record<string, strin
   // Write .mcp.json into cwd so Claude Code finds the wechat server
   ensureMcpConfig(cwd);
 
-  // Strip proxy env vars — WeChat API must go direct
-  const cleanEnv = { ...process.env, ...env };
-  for (const k of ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"]) {
-    delete cleanEnv[k];
-  }
+  // Don't strip proxy vars here — Claude Code needs them for Anthropic API.
+  // server.ts strips proxy vars in its own main() for WeChat API calls.
 
   return spawn(claudePath, [
     "--dangerously-load-development-channels", "server:wechat",
     ...extraArgs,
   ], {
     cwd,
-    env: cleanEnv,
+    env: { ...process.env, ...env },
     stdio: "inherit",
   });
 }
@@ -125,10 +121,7 @@ function main() {
 
     const proc = launchClaude(claudePath, setupDir, {
       WECHAT_CHANNEL_PROFILE: "default",
-    }, [
-      "--append-system-prompt", setupPrompt,
-      "开始设置微信",
-    ]);
+    });
     proc.on("exit", (code) => process.exit(code ?? 0));
     return;
   }

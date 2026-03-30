@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "wechat": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/server.js"]
+      "command": "npx",
+      "args": ["-y", "@xiaoyifu_0000/wechat-channel", "start"]
     }
   }
 }

@@ -178,6 +178,8 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
         if (msg.context_token) {
           contextTokens.set(contextKey, msg.context_token);
           if (isGroup) contextTokens.set(senderId, msg.context_token);
+        } else {
+          log(`消息缺少 context_token: from=${senderId} — 无法回复，等待下一条`);
         }
 
         const canReply = Boolean(contextTokens.get(contextKey));
