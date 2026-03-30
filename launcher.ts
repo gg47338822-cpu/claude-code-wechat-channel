@@ -83,7 +83,7 @@ function startProfile(profileName: string, claudePath: string): ChildProcess {
   const shellCmd = [
     `(sleep 3 && echo && sleep 3 && echo)`,
     `| ${esc(claudePath)}`,
-    `--permission-mode bypassPermissions`,
+    `--dangerously-skip-permissions`,
     `--plugin-dir ${esc(PLUGIN_ROOT)}`,
   ].join(" ");
 
@@ -143,6 +143,7 @@ function main() {
     ].join("\n");
     const proc = spawn(claudePath, [
       "--plugin-dir", PLUGIN_ROOT,
+      "--dangerously-skip-permissions",
       "--append-system-prompt", setupPrompt,
       "开始设置微信",
     ], {
