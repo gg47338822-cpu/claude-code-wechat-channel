@@ -126,7 +126,26 @@ function main() {
   // No profiles yet — launch Claude Code for first-time setup
   if (allProfiles.length === 0) {
     log("首次启动，进入引导模式...");
-    const proc = spawn(claudePath, ["--plugin-dir", PLUGIN_ROOT, "你好，请开始微信 Channel 的首次设置引导。按照 wechat plugin 的 instructions 中的 Setup Flow 逐步引导我完成配置。"], {
+    const setupPrompt = [
+      "你正在帮用户设置微信 Channel 插件。用中文，友好地一步步引导。",
+      "",
+      "步骤:",
+      "1. 欢迎用户，简单介绍：这个插件让微信消息接入 Claude Code，别人在微信里给你发消息，你就能看到并回复。",
+      "2. 问：你希望我在微信里扮演什么角色？（例：私人助手、技术顾问、英语老师）以及说话风格。",
+      "3. 问：对话记忆存在哪里？全局目录还是某个项目文件夹？需要帮你新建吗？",
+      "4. 问：需要限制谁可以发消息吗？（可选，不限制就跳过）",
+      `5. 把配置写入 ~/.claude/channels/wechat/profiles/default/profile.json（JSON 格式，含 identity, rules, workdir, allow_from 字段）`,
+      `6. 确保目录存在: ~/.claude/channels/wechat/profiles/default/memory/ 和 media/`,
+      "7. 告诉用户：配置完成，现在连接微信。请确保微信是最新版。然后调用 wechat_login 工具。",
+      "8. 扫码成功后恭喜用户，告诉他微信消息会出现在这个终端里。",
+      "",
+      "现在开始第 1 步。",
+    ].join("\n");
+    const proc = spawn(claudePath, [
+      "--plugin-dir", PLUGIN_ROOT,
+      "--append-system-prompt", setupPrompt,
+      "开始设置微信",
+    ], {
       stdio: "inherit",
       env: { ...process.env, WECHAT_CHANNEL_PROFILE: "default" },
     });
