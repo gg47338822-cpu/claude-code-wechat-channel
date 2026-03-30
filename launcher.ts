@@ -126,7 +126,7 @@ function main() {
   // No profiles yet — launch Claude Code for first-time setup
   if (allProfiles.length === 0) {
     log("首次启动，进入引导模式...");
-    const proc = spawn(claudePath, ["--plugin-dir", PLUGIN_ROOT], {
+    const proc = spawn(claudePath, ["--plugin-dir", PLUGIN_ROOT, "你好，请开始微信 Channel 的首次设置引导。按照 wechat plugin 的 instructions 中的 Setup Flow 逐步引导我完成配置。"], {
       stdio: "inherit",
       env: { ...process.env, WECHAT_CHANNEL_PROFILE: "default" },
     });
