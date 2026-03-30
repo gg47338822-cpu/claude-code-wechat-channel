@@ -79,25 +79,21 @@ function startProfile(profileName: string, claudePath: string): ChildProcess {
   const config = loadProfileConfig(profileName);
   const workdir = config.workdir || process.cwd();
 
-  const esc = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
-  const shellCmd = [
-    `(sleep 3 && echo && sleep 3 && echo)`,
-    `| ${esc(claudePath)}`,
-    `--dangerously-skip-permissions`,
-    `--plugin-dir ${esc(PLUGIN_ROOT)}`,
-  ].join(" ");
-
   // Strip proxy env vars — WeChat API must go direct
   const cleanEnv = { ...process.env };
   for (const k of ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"]) {
     delete cleanEnv[k];
   }
 
-  const proc = spawn("bash", ["-c", shellCmd], {
+  const proc = spawn(claudePath, [
+    "--plugin-dir", PLUGIN_ROOT,
+    "--dangerously-skip-permissions",
+  ], {
     cwd: workdir,
     env: {
       ...cleanEnv,
       WECHAT_CHANNEL_PROFILE: profileName,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
       CLAUDE_ROLE: profileName,
       ...(profileName !== "home" ? { CLAUDE_SANDBOX: "true" } : {}),
     },
