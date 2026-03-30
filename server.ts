@@ -342,10 +342,23 @@ async function main() {
 
   const account = loadCredentials(paths.credentialsFile);
   if (!account) {
-    log("未找到凭据，等待 Claude 引导用户完成初始化...");
-    // Don't auto-login. Claude will guide the user through setup
-    // and call wechat_login tool when ready.
-    // Keep the process alive waiting for tool calls.
+    log("未找到凭据，发送引导通知...");
+    // Send a channel notification to trigger Claude's onboarding flow
+    // (instructions alone are passive — Claude won't act until it sees a message)
+    setTimeout(async () => {
+      try {
+        await mcp.notification({
+          method: "notifications/claude/channel",
+          params: {
+            content: "WeChat Channel 插件已加载，请开始引导用户完成首次设置。按 instructions 中的 Setup Flow 步骤进行。",
+            meta: { sender: "system", sender_id: "system", msg_type: "setup", can_reply: "false" },
+          },
+        });
+      } catch (err) {
+        logError(`引导通知失败: ${err}`);
+      }
+    }, 1000);
+    // Keep the process alive waiting for tool calls
     await new Promise(() => {});
   }
 
