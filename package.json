@@ -16,6 +16,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "prepare": "node esbuild.config.mjs",
     "build": "node esbuild.config.mjs",
     "start": "node dist/server.js",
     "dev": "npx tsx server.ts",
@@ -25,16 +26,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jasonlee-ss/claude-code-wechat-channel"
+    "url": "https://github.com/gg47338822-cpu/claude-code-wechat-channel"
   },
-  "homepage": "https://github.com/jasonlee-ss/claude-code-wechat-channel#readme",
+  "homepage": "https://github.com/gg47338822-cpu/claude-code-wechat-channel#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "esbuild": "^0.25.0",
     "qrcode-terminal": "^0.12.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "esbuild": "^0.25.0",
     "typescript": "^5.7.0"
   },
   "engines": {
