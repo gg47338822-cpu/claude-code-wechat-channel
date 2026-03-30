@@ -4,7 +4,6 @@
   "description": "WeChat messaging bridge for Claude Code. Send and receive WeChat messages directly in your Claude Code session.",
   "author": { "name": "Jason Lee" },
   "license": "MIT",
-  "mcpServers": "../.mcp.json",
   "channels": [
     {
       "server": "wechat",
