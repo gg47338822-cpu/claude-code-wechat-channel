@@ -25,6 +25,9 @@ fs.writeFileSync("dist/cli.js", `#!/usr/bin/env node
 const cmd = process.argv[2];
 if (cmd === "start") {
   import("./server.js");
+} else if (cmd === "new") {
+  process.env.WECHAT_SETUP_NEW = process.argv[3] || "";
+  import("./launcher.js");
 } else {
   import("./launcher.js");
 }

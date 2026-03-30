@@ -97,30 +97,18 @@ function main() {
   log(`Plugin: ${PLUGIN_ROOT}`);
 
   const allProfiles = discoverProfiles();
+  const setupNew = process.env.WECHAT_SETUP_NEW;
 
-  // ── First-time setup ──
-  if (allProfiles.length === 0) {
-    log("首次启动，进入引导模式...");
+  // ── Setup mode: first time or "wechat-channel new [name]" ──
+  if (allProfiles.length === 0 || setupNew !== undefined) {
+    const profileName = setupNew || "default";
+    const autoName = profileName || `wechat-${allProfiles.length + 1}`;
+    log(`设置新 profile: ${autoName}`);
 
     const setupDir = path.join(HOME, ".claude", "channels", "wechat");
-    const setupPrompt = [
-      "你正在帮用户设置微信 Channel 插件。用中文，友好地一步步引导。",
-      "",
-      "步骤:",
-      "1. 欢迎用户，简单介绍：这个插件让微信消息接入 Claude Code，别人在微信里给你发消息，你就能看到并回复。",
-      "2. 问：你希望我在微信里扮演什么角色？（例：私人助手、技术顾问、英语老师）以及说话风格。",
-      "3. 问：对话记忆存在哪里？全局目录还是某个项目文件夹？需要帮你新建吗？",
-      "4. 问：需要限制谁可以发消息吗？（可选，不限制就跳过）",
-      "5. 把配置写入 ~/.claude/channels/wechat/profiles/default/profile.json",
-      "6. 确保目录存在: ~/.claude/channels/wechat/profiles/default/memory/ 和 media/",
-      "7. 告诉用户：配置完成，现在连接微信。请确保微信是最新版。然后调用 wechat_login 工具。",
-      "8. 扫码成功后恭喜用户，告诉他微信消息会出现在这个终端里。",
-      "",
-      "现在开始第 1 步。",
-    ].join("\n");
 
     const proc = launchClaude(claudePath, setupDir, {
-      WECHAT_CHANNEL_PROFILE: "default",
+      WECHAT_CHANNEL_PROFILE: autoName,
     });
     proc.on("exit", (code) => process.exit(code ?? 0));
     return;
