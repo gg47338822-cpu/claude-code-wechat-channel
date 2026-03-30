@@ -127,15 +127,6 @@ function main() {
   if (allProfiles.length === 0) {
     log("首次启动，进入引导模式...");
 
-    // Write a temp MCP config with absolute path to server.js
-    const serverJs = path.join(PLUGIN_ROOT, "dist", "server.js");
-    const tmpMcpConfig = path.join(PLUGIN_ROOT, ".mcp-resolved.json");
-    fs.writeFileSync(tmpMcpConfig, JSON.stringify({
-      mcpServers: {
-        wechat: { command: "node", args: [serverJs] },
-      },
-    }));
-
     const setupPrompt = [
       "你正在帮用户设置微信 Channel 插件。用中文，友好地一步步引导。",
       "",
@@ -152,13 +143,17 @@ function main() {
       "现在开始第 1 步。",
     ].join("\n");
     const proc = spawn(claudePath, [
-      "--mcp-config", tmpMcpConfig,
+      "--plugin-dir", PLUGIN_ROOT,
       "--dangerously-skip-permissions",
       "--append-system-prompt", setupPrompt,
       "开始设置微信",
     ], {
       stdio: "inherit",
-      env: { ...process.env, WECHAT_CHANNEL_PROFILE: "default" },
+      env: {
+        ...process.env,
+        WECHAT_CHANNEL_PROFILE: "default",
+        CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+      },
     });
     proc.on("exit", (code) => process.exit(code ?? 0));
     return;

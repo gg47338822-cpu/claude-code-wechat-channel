@@ -1,6 +1,8 @@
 {
-  "wechat": {
-    "command": "node",
-    "args": ["${CLAUDE_PLUGIN_ROOT}/dist/server.js"]
+  "mcpServers": {
+    "wechat": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/server.js"]
+    }
   }
 }
