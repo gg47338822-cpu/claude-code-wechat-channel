@@ -156,6 +156,7 @@ const mcp = new Server(
 // ── Tool handlers ──────────────────────────────────────────────────────────
 
 let activeAccount: AccountData | null = null;
+let pollingActive = false;
 
 mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
@@ -222,11 +223,14 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     if (account) {
       activeAccount = account;
       // Start polling in background (don't await — let the tool return immediately)
-      startPolling(account, {
-        mcp, profileName: PROFILE_NAME, paths, contextTokens,
-        setActiveAccount: (a) => { activeAccount = a; },
-        log, logError,
-      }).catch((err) => { logError(`Polling fatal: ${err}`); process.exit(1); });
+      if (!pollingActive) {
+        pollingActive = true;
+        startPolling(account, {
+          mcp, profileName: PROFILE_NAME, paths, contextTokens,
+          setActiveAccount: (a) => { activeAccount = a; },
+          log, logError,
+        }).catch((err) => { logError(`Polling fatal: ${err}`); process.exit(1); });
+      }
       return { content: [{ type: "text" as const, text: `登录成功！账号: ${account.accountId}，Profile: ${PROFILE_NAME}。微信消息监听已启动。` }] };
     }
     return { content: [{ type: "text" as const, text: "登录失败或超时。请重试。" }] };

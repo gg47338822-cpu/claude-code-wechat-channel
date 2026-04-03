@@ -5,7 +5,7 @@
 ## 安装
 
 ```bash
-npm install -g @xiaoyifu_0000/wechat-channel
+npm install -g gg47338822-cpu/claude-code-wechat-channel
 ```
 
 ## 首次设置
@@ -30,20 +30,12 @@ wechat-channel new 妈妈     # 中文也行
 
 ## 日常启动
 
-设置完成后，每次启动微信 bot 用这个命令：
-
 ```bash
-claude --dangerously-load-development-channels server:wechat
+wechat-channel              # 自动启动所有微信号
+wechat-channel run home     # 只启动指定的号
 ```
 
-在 `~/.claude/channels/wechat/` 目录下运行（首次设置后自动生成 `.mcp.json`）。
-
-如果有多个微信号，指定 profile：
-
-```bash
-cd ~/.claude/channels/wechat
-WECHAT_CHANNEL_PROFILE=work claude --dangerously-load-development-channels server:wechat
-```
+就这一个命令。它会自动发现所有已配置的微信号并启动对应的 Claude 进程。
 
 ## 前提条件
 
@@ -56,9 +48,21 @@ WECHAT_CHANNEL_PROFILE=work claude --dangerously-load-development-channels serve
 - **多实例** — 同时运行多个微信号，各有各的身份和规则
 - **记忆系统** — 每个微信号有独立的对话记忆，重启不丢
 - **媒体支持** — 自动下载图片/视频/文件，也能发图发文件
-- **自动重登** — Token 过期自动弹二维码重新扫
+- **自动重登** — Token 过期会通知你并弹二维码重新扫
+- **断连通知** — 连接异常时通过微信主动告知
 - **群聊** — 支持群消息，能识别发送者
 - **长消息分块** — 超长回复自动分成多条
+
+## 常用命令
+
+在 Claude Code 会话里可以用：
+
+| 命令 | 说明 |
+|------|------|
+| `/access` | 重新扫码登录 |
+| `/access status` | 查看连接状态 |
+| `/access setup` | 创建新 profile |
+| `/access config` | 修改当前 profile 配置 |
 
 ## 常见问题
 
@@ -68,11 +72,23 @@ WECHAT_CHANNEL_PROFILE=work claude --dangerously-load-development-channels serve
 - 重新扫码：在 Claude Code 里输入 `/access`
 
 ### Token 过期
-系统会自动检测并弹出重新扫码页面。如果没有自动弹，手动运行 `/access`。
+系统会自动检测并通过微信通知你。然后在终端弹出二维码页面，重新扫码即可。
+如果没有自动弹，手动运行 `/access`。
 
 ### 删除某个微信号
 ```bash
 rm -rf ~/.claude/channels/wechat/profiles/<名字>
+```
+
+## 数据存储
+
+所有数据在本地：
+```
+~/.claude/channels/wechat/profiles/<名字>/
+  account.json   — 登录凭据
+  profile.json   — 身份、规则、白名单
+  memory/        — 对话记忆
+  media/         — 下载的图片/文件（7天自动清理）
 ```
 
 ## License

@@ -64,11 +64,11 @@ Replace the placeholders:
 - `{CLAUDE_BIN_DIR}` — directory containing the claude binary
 - `{USER_HOME}` — user's home directory ($HOME)
 
-5. Write the plist to `/Library/LaunchDaemons/com.wechat-channel.launcher.plist` using sudo (Bash tool with sudo)
+5. Write the plist to `~/Library/LaunchAgents/com.wechat-channel.launcher.plist`
 
-6. Load the service: `sudo launchctl load /Library/LaunchDaemons/com.wechat-channel.launcher.plist`
+6. Load the service: `launchctl load ~/Library/LaunchAgents/com.wechat-channel.launcher.plist`
 
-7. Verify: `sudo launchctl list | grep wechat-channel`
+7. Verify: `launchctl list | grep wechat-channel`
 
 8. Tell the user:
    - Service installed and running
@@ -79,12 +79,11 @@ Replace the placeholders:
 
 Remove the LaunchDaemon:
 
-1. Unload: `sudo launchctl unload /Library/LaunchDaemons/com.wechat-channel.launcher.plist`
-2. Delete plist: `sudo rm /Library/LaunchDaemons/com.wechat-channel.launcher.plist`
+1. Unload: `launchctl unload ~/Library/LaunchAgents/com.wechat-channel.launcher.plist`
+2. Delete plist: `rm ~/Library/LaunchAgents/com.wechat-channel.launcher.plist`
 3. Confirm removal to user
 
 ## Notes
-- Requires sudo for LaunchDaemon operations
+- Uses LaunchAgent (user-level, no sudo required)
 - The launcher auto-discovers all profiles in `~/.claude/channels/wechat/profiles/`
-- If using LaunchAgent (user-level, no sudo) instead, write to `~/Library/LaunchAgents/` and use `launchctl load` without sudo
 - Logs rotate automatically — check stderr log for errors

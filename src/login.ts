@@ -119,7 +119,7 @@ async function poll(){
   try{const r=await fetch("/qr-status");const d=await r.json();const el=document.getElementById("status");
   if(d.status==="scaned"){el.textContent="已扫码，请确认...";}
   else if(d.status==="confirmed"){el.textContent="登录成功!";el.className="success";return;}
-  else if(d.status==="expired"){el.textContent="已过期，请刷新";el.className="expired";return;}}catch{}
+  else if(d.status==="expired"){el.textContent="二维码已过期，请刷新页面重试";el.className="expired";return;}}catch{}
   setTimeout(poll,2000);}
 poll();
 </script></body></html>`;

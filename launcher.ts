@@ -55,18 +55,35 @@ function loadProfileConfig(profileName: string): { workdir?: string } {
 }
 
 /**
- * Write .mcp.json into a directory so Claude Code auto-discovers the wechat MCP server.
- * Uses npx to resolve the package — works after npm install -g.
+ * Ensure .mcp.json in a directory contains the wechat MCP server entry.
+ * Merges into existing config — never overwrites other servers.
+ * Uses local dist path instead of npx for speed and consistency.
  */
 function ensureMcpConfig(dir: string): void {
   const mcpFile = path.join(dir, ".mcp.json");
-  const config = {
-    mcpServers: {
-      wechat: { command: "npx", args: ["-y", "@xiaoyifu_0000/wechat-channel", "start"] },
-    },
-  };
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(mcpFile, JSON.stringify(config, null, 2));
+  let config: { mcpServers?: Record<string, unknown> } = {};
+  try {
+    if (fs.existsSync(mcpFile)) {
+      config = JSON.parse(fs.readFileSync(mcpFile, "utf-8"));
+    }
+  } catch { /* corrupted file, start fresh */ }
+
+  if (!config.mcpServers) config.mcpServers = {};
+
+  const serverJsPath = path.join(PLUGIN_ROOT, "dist", "server.js");
+  const wechatConfig = fs.existsSync(serverJsPath)
+    ? { command: "node", args: [serverJsPath] }
+    : { command: "npx", args: ["-y", "gg47338822-cpu/claude-code-wechat-channel", "start"] };
+
+  // Only write if wechat entry is missing or different
+  const existing = JSON.stringify((config.mcpServers as Record<string, unknown>).wechat ?? null);
+  const desired = JSON.stringify(wechatConfig);
+  if (existing !== desired) {
+    (config.mcpServers as Record<string, unknown>).wechat = wechatConfig;
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(mcpFile, JSON.stringify(config, null, 2));
+    log(`.mcp.json 已更新: ${mcpFile}`);
+  }
 }
 
 // ── Launch a single profile ───────────────────────────────────────────────
@@ -118,7 +135,11 @@ function main() {
   const runProfile = process.env.WECHAT_RUN_PROFILE;
   if (runProfile !== undefined) {
     const name = runProfile;
-    if (!name || !allProfiles.includes(name)) {
+    if (!name) {
+      logError(`用法: wechat-channel run <profile名>\n可用: ${allProfiles.join(", ")}`);
+      process.exit(1);
+    }
+    if (!allProfiles.includes(name)) {
       logError(`profile "${name}" 不存在。可用: ${allProfiles.join(", ")}`);
       process.exit(1);
     }
@@ -149,7 +170,6 @@ function main() {
     const proc = launchClaude(claudePath, workdir, {
       WECHAT_CHANNEL_PROFILE: name,
       CLAUDE_ROLE: name,
-      ...(name !== "home" ? { CLAUDE_SANDBOX: "true" } : {}),
     });
 
     log(`${name} 已启动 (pid: ${proc.pid}, cwd: ${workdir})`);

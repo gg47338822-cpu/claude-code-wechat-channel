@@ -103,6 +103,16 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
 
         if (isAuthError && consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
           logError("Token 过期，启动重新登录...");
+          // Notify user via WeChat before re-login (best-effort with current token)
+          try {
+            const profileConfig = loadProfileConfig(paths.profileConfigFile);
+            const recipient = profileConfig.allow_from?.[0];
+            const ct = contextTokens.get(recipient || "");
+            if (recipient && ct) {
+              await sendTextMessage(baseUrl, token, recipient,
+                `[${profileName}] Token 过期，需要重新扫码登录。请在终端查看二维码。`, ct);
+            }
+          } catch { /* notification is best-effort */ }
           const newAccount = await doQRLoginWithWebServer(baseUrl, profileName, paths.credentialsFile, log);
           if (newAccount) {
             token = newAccount.token;
@@ -118,6 +128,16 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
         }
 
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          // Notify user about connection issues (best-effort)
+          try {
+            const profileConfig = loadProfileConfig(paths.profileConfigFile);
+            const recipient = profileConfig.allow_from?.[0];
+            const ct = contextTokens.get(recipient || "");
+            if (recipient && ct) {
+              await sendTextMessage(baseUrl, token, recipient,
+                `[${profileName}] 连接异常，${BACKOFF_DELAY_MS / 1000}秒后重试。errmsg: ${resp.errmsg ?? "unknown"}`, ct);
+            }
+          } catch { /* best-effort */ }
           consecutiveFailures = 0;
           await new Promise((r) => setTimeout(r, BACKOFF_DELAY_MS));
         } else {
@@ -174,7 +194,8 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
         }
 
         // Cache context token
-        const contextKey = groupId ?? senderId;
+        const contextKey = groupId || senderId;
+        if (!contextKey) { log(`跳过: 消息无有效 contextKey (senderId=${senderId})`); continue; }
         log(`context_token: ${msg.context_token ? "有(" + msg.context_token.slice(0, 20) + "...)" : "无"} key=${contextKey}`);
         if (msg.context_token) {
           contextTokens.set(contextKey, msg.context_token);
@@ -222,6 +243,15 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
       consecutiveFailures++;
       logError(`轮询异常: ${String(err)}`);
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        try {
+          const profileConfig = loadProfileConfig(paths.profileConfigFile);
+          const recipient = profileConfig.allow_from?.[0];
+          const ct = contextTokens.get(recipient || "");
+          if (recipient && ct) {
+            await sendTextMessage(baseUrl, token, recipient,
+              `[${profileName}] 轮询异常，${BACKOFF_DELAY_MS / 1000}秒后重试: ${String(err).slice(0, 100)}`, ct);
+          }
+        } catch { /* best-effort */ }
         consecutiveFailures = 0;
         await new Promise((r) => setTimeout(r, BACKOFF_DELAY_MS));
       } else {

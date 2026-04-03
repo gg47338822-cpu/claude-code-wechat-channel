@@ -26,10 +26,26 @@ skills/service/    — /service LaunchDaemon 管理（install/uninstall）
 
 ```bash
 npm run build          # esbuild -> dist/
-npm start              # 单实例启动
-npm run launch         # 多实例启动（所有 profiles）
-npx tsx launcher.ts home legal  # 启动指定 profiles
+
+# === 日常启动（推荐） ===
+# 单个 profile: 在对应 workdir 下启动 Claude CLI，加载 wechat channel
+cd ~/                  # home profile 的 workdir
+claude --dangerously-load-development-channels server:wechat
+
+# 多实例: launcher 自动发现所有 profiles 并启动
+npm run launch         # 或 npx tsx launcher.ts
+npx tsx launcher.ts home legal  # 只启动指定 profiles
+
+# === 开发/调试 ===
+npm run dev            # tsx 直接跑 server.ts（MCP server，需要 Claude CLI 的 stdio）
+npm start              # node dist/server.js（同上，编译后版本）
 ```
+
+**注意**：
+- `npm start` / `npm run dev` 只启动 MCP server 进程，不启动 Claude CLI。
+  它们需要配合 Claude CLI 的 `--dangerously-load-development-channels` 使用。
+- 使用 v2 前必须先停止 v1（共享 profile 目录，PID 锁互斥）。
+- launcher 会合并 `.mcp.json`（不覆盖已有 MCP 配置），优先用本地 dist/server.js。
 
 ## Profile 数据
 

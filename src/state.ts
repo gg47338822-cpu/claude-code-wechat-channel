@@ -9,6 +9,8 @@ import { showTypingIndicator } from "./message.js";
 
 const MAX_CACHE_ENTRIES = 500;
 
+function log(msg: string) { process.stderr.write(`[state] ${msg}\n`); }
+
 export class ContextTokenCache {
   private cache: Map<string, string>;
   private filePath: string;
@@ -42,15 +44,25 @@ export class ContextTokenCache {
   }
 
   get(key: string): string | undefined {
+    // 1. Exact match — fastest path
     const exact = this.cache.get(key);
     if (exact) return exact;
-    // Fallback: return most recent token if exact key doesn't match.
-    // Needed because sender_id format may differ between message receipt and tool call.
-    if (this.cache.size > 0) {
-      let last: string | undefined;
-      for (const v of this.cache.values()) last = v;
-      return last;
+
+    // 2. Try bare-id match (strip @im.wechat suffix or match against bare keys)
+    //    sender_id format can differ between message receipt and tool call
+    const bareKey = key.split("@")[0];
+    for (const [k, v] of this.cache) {
+      if (k.split("@")[0] === bareKey) return v;
     }
+
+    // 3. Single-user fallback: if only one entry, it's almost certainly the right one.
+    //    This covers format mismatches for single-user (most common for external users).
+    if (this.cache.size === 1) {
+      const [, token] = [...this.cache.entries()][0];
+      log(`context_token: 单用户 fallback (key=${key}, cache有 ${[...this.cache.keys()][0]})`);
+      return token;
+    }
+
     return undefined;
   }
 
