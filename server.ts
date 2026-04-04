@@ -257,7 +257,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   const args = (req.params.arguments ?? {}) as Record<string, unknown>;
   const senderId = args.sender_id;
   if (!senderId || typeof senderId !== "string") {
-    return { content: [{ type: "text" as const, text: "error: sender_id is required" }] };
+    return { content: [{ type: "text" as const, text: "❌ 缺少 sender_id 参数" }] };
   }
   const ct = contextTokens.get(senderId);
 
@@ -269,7 +269,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     if (req.params.name === "wechat_reply") {
       const text = args.text;
       if (!text || typeof text !== "string") {
-        return { content: [{ type: "text" as const, text: "error: text is required and must be a string" }] };
+        return { content: [{ type: "text" as const, text: "❌ 缺少 text 参数" }] };
       }
       await sendTextMessage(baseUrl, token, senderId, text, ct);
       onBotReply(senderId);
@@ -278,22 +278,22 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     if (req.params.name === "wechat_send_image" || req.params.name === "wechat_send_file") {
       const rawPath = args.file_path;
       if (!rawPath || typeof rawPath !== "string") {
-        return { content: [{ type: "text" as const, text: "error: file_path is required" }] };
+        return { content: [{ type: "text" as const, text: "❌ 缺少 file_path 参数" }] };
       }
       // Resolve symlinks to prevent path traversal
       let filePath: string;
       try {
         filePath = fs.realpathSync(path.resolve(rawPath));
       } catch {
-        return { content: [{ type: "text" as const, text: `error: file not found: ${path.basename(rawPath)}` }] };
+        return { content: [{ type: "text" as const, text: `❌ 文件不存在: ${path.basename(rawPath)}` }] };
       }
       const allowedRoots = [process.cwd(), process.env.HOME || "", paths.mediaDir].filter(Boolean).map(p => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } });
       if (!allowedRoots.some(root => filePath.startsWith(root + path.sep) || filePath === root)) {
-        return { content: [{ type: "text" as const, text: "error: file path not allowed" }] };
+        return { content: [{ type: "text" as const, text: "❌ 文件路径不在允许范围内" }] };
       }
       const stat = fs.statSync(filePath);
       const maxSize = req.params.name === "wechat_send_image" ? 10 * 1024 * 1024 : 20 * 1024 * 1024;
-      if (stat.size > maxSize) return { content: [{ type: "text" as const, text: `error: file too large (max ${maxSize / 1024 / 1024}MB)` }] };
+      if (stat.size > maxSize) return { content: [{ type: "text" as const, text: `❌ 文件太大（最大 ${maxSize / 1024 / 1024}MB）` }] };
       const buf = fs.readFileSync(filePath);
       if (req.params.name === "wechat_send_image") {
         await sendImageMessage(baseUrl, token, senderId, buf, ct);
@@ -304,7 +304,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       return { content: [{ type: "text" as const, text: `file sent: ${path.basename(rawPath)}` }] };
     }
   } catch (err) {
-    return { content: [{ type: "text" as const, text: `failed: ${String(err)}` }] };
+    return { content: [{ type: "text" as const, text: `❌ 发送失败: ${String(err)}` }] };
   }
 
   throw new Error(`unknown tool: ${req.params.name}`);

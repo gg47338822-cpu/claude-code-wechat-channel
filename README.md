@@ -2,11 +2,17 @@
 
 把微信接入 Claude Code。朋友在微信里给你发消息，Claude 帮你回复。
 
-## 安装
+## 快速开始
 
 ```bash
+# 安装
 npm install -g gg47338822-cpu/claude-code-wechat-channel
+
+# 日常使用只需一条命令
+wechat-channel
 ```
+
+> 如果 `npm install -g` 遇到权限错误，请尝试 `sudo npm install -g gg47338822-cpu/claude-code-wechat-channel`
 
 ## 首次设置
 
@@ -64,6 +70,15 @@ wechat-channel run home     # 只启动指定的号
 | `/access setup` | 创建新 profile |
 | `/access config` | 修改当前 profile 配置 |
 
+## 从旧版升级
+
+如果之前用的是 `@xiaoyifu_0000/wechat-channel`：
+
+```bash
+# 安装新版后运行一次升级，自动迁移配置
+wechat-channel upgrade
+```
+
 ## 常见问题
 
 ### 消息收不到
@@ -74,6 +89,23 @@ wechat-channel run home     # 只启动指定的号
 ### Token 过期
 系统会自动检测并通过微信通知你。然后在终端弹出二维码页面，重新扫码即可。
 如果没有自动弹，手动运行 `/access`。
+
+### 提示"微信插件已经在运行中"
+说明上次没正常退出。按提示运行 `kill <进程号>` 或删除锁文件后重新启动。
+
+### 关了电脑再打开，怎么恢复？
+直接运行 `wechat-channel`。如果上次非正常退出，会自动清理残留并恢复，不需要重新扫码。
+
+### 扫码页面打不开
+终端会显示 URL（如 `http://localhost:9876`），手动在浏览器中打开即可。
+
+### npm install 报权限错误
+```bash
+sudo npm install -g gg47338822-cpu/claude-code-wechat-channel
+```
+
+### 升级后微信不回消息了
+可能是 `.mcp.json` 里还指向旧包名。运行 `wechat-channel upgrade` 自动修复。
 
 ### 删除某个微信号
 ```bash

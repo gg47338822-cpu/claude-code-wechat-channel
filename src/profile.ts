@@ -103,7 +103,10 @@ export function acquireLock(pidFile: string): void {
         process.exit(1);
       } catch {
         // Process not running — stale lock, clean it up
-        process.stderr.write(`[wechat] 发现残留锁文件（进程 ${pid} 已不存在），已自动清理\n`);
+        process.stderr.write(
+          `[wechat] 上次未正常退出（进程 ${pid} 已不存在），已自动恢复。\n` +
+          `[wechat] 消息从断点继续，无需重新扫码。\n`
+        );
       }
     }
   } catch { /* no lock file */ }

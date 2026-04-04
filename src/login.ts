@@ -4,6 +4,7 @@
 
 import http from "node:http";
 import { execFileSync } from "node:child_process";
+import QRCode from "qrcode";
 import { apiFetch } from "./api.js";
 import { saveCredentials } from "./profile.js";
 import { BOT_TYPE, DEFAULT_BASE_URL, type AccountData, type QRCodeResponse, type QRStatusResponse } from "./types.js";
@@ -94,7 +95,11 @@ export async function doQRLogin(
 
 // ── Web server QR login (for token refresh while running) ──────────────────
 
-function buildQRPageHtml(qrUrl: string, profileName: string): string {
+async function generateQRSvg(data: string): Promise<string> {
+  return QRCode.toString(data, { type: "svg", width: 280, margin: 1 });
+}
+
+async function buildQRPageHtml(qrSvg: string, qrUrl: string, profileName: string): Promise<string> {
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>微信重新登录 - ${profileName}</title>
 <style>
@@ -105,12 +110,12 @@ h2{margin:0 0 8px;color:#333}
 #status{margin-top:20px;font-size:18px;color:#666}
 .success{color:#07c160!important;font-weight:bold}
 .expired{color:#e74c3c!important}
-img{width:280px;height:280px}
+#qr-container svg{width:280px;height:280px}
 </style></head><body>
 <div class="card">
 <h2>微信重新登录</h2>
 <p class="hint">Profile: ${profileName} | Token 已过期</p>
-<img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(qrUrl)}" alt="QR"/>
+<div id="qr-container">${qrSvg}</div>
 <p style="font-size:13px;color:#999">或打开: <a href="${qrUrl}" target="_blank">扫码链接</a></p>
 <div id="status">等待扫码...</div>
 </div>
@@ -119,7 +124,11 @@ async function poll(){
   try{const r=await fetch("/qr-status");const d=await r.json();const el=document.getElementById("status");
   if(d.status==="scaned"){el.textContent="已扫码，请确认...";}
   else if(d.status==="confirmed"){el.textContent="登录成功!";el.className="success";return;}
-  else if(d.status==="expired"){el.textContent="二维码已过期，请刷新页面重试";el.className="expired";return;}}catch{}
+  else if(d.status==="expired"){
+    el.textContent="二维码已过期，正在刷新...";el.className="expired";
+    try{const nr=await fetch("/qr-refresh");if(nr.ok){location.reload();}}
+    catch{el.textContent="刷新失败，请手动刷新页面";}
+    }}catch{}
   setTimeout(poll,2000);}
 poll();
 </script></body></html>`;
@@ -132,27 +141,50 @@ export async function doQRLoginWithWebServer(
   log: (msg: string) => void,
 ): Promise<AccountData | null> {
   log("Token 过期，启动 Web 二维码...");
-  const qrResp = await fetchQRCode(baseUrl);
-  const html = buildQRPageHtml(qrResp.qrcode_img_content, profileName);
+  let qrResp = await fetchQRCode(baseUrl);
+  let currentHtml = await buildQRPageHtml(
+    await generateQRSvg(qrResp.qrcode_img_content),
+    qrResp.qrcode_img_content,
+    profileName,
+  );
 
   let latestStatus: QRStatusResponse = { status: "wait" };
   let loginResolved = false;
+  let currentQrCode = qrResp.qrcode;
 
   return new Promise<AccountData | null>((resolve) => {
-    const server = http.createServer((req, res) => {
+    const server = http.createServer(async (req, res) => {
       if (req.url === "/qr-status") {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ status: latestStatus.status }));
+      } else if (req.url === "/qr-refresh") {
+        // Auto-refresh: fetch a new QR code and rebuild the page
+        try {
+          qrResp = await fetchQRCode(baseUrl);
+          currentQrCode = qrResp.qrcode;
+          currentHtml = await buildQRPageHtml(
+            await generateQRSvg(qrResp.qrcode_img_content),
+            qrResp.qrcode_img_content,
+            profileName,
+          );
+          latestStatus = { status: "wait" };
+          log("二维码已刷新");
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
+        } catch (err) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false }));
+        }
       } else {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(html);
+        res.end(currentHtml);
       }
     });
 
     function tryListen(port: number) {
       server.once("error", (err: NodeJS.ErrnoException) => {
         if (err.code === "EADDRINUSE" && port < QR_SERVER_MAX_PORT) tryListen(port + 1);
-        else { log(`Web 服务器启动失败: ${err.message}`); resolve(null); }
+        else { log(`❌ 扫码页面启动失败（端口可能被占用），请稍后重试`); resolve(null); }
       });
       server.listen(port, "127.0.0.1", () => {
         const addr = server.address();
@@ -162,15 +194,15 @@ export async function doQRLoginWithWebServer(
         try { execFileSync(openCmd, [`http://localhost:${actualPort}`]); } catch {
           log(`如果浏览器没有自动打开，请手动访问: http://localhost:${actualPort}`);
         }
-        startPolling();
+        startQRPolling();
       });
     }
 
-    async function startPolling() {
+    async function startQRPolling() {
       const deadline = Date.now() + 480_000;
       while (Date.now() < deadline && !loginResolved) {
         try {
-          latestStatus = await pollQRStatus(baseUrl, qrResp.qrcode);
+          latestStatus = await pollQRStatus(baseUrl, currentQrCode);
           if (latestStatus.status === "confirmed") {
             if (!latestStatus.ilink_bot_id || !latestStatus.bot_token) {
               loginResolved = true; server.close(); resolve(null); return;
@@ -189,9 +221,7 @@ export async function doQRLoginWithWebServer(
             resolve(account);
             return;
           }
-          if (latestStatus.status === "expired") {
-            loginResolved = true; server.close(); resolve(null); return;
-          }
+          // Don't exit on expired — let the web page auto-refresh via /qr-refresh
         } catch (err) { log(`QR 轮询异常: ${String(err)}`); }
         await new Promise((r) => setTimeout(r, 2000));
       }

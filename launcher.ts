@@ -247,6 +247,17 @@ function main() {
   if (allProfiles.length === 0 || setupNew !== undefined) {
     const profileName = setupNew || "default";
     const autoName = profileName || `wechat-${allProfiles.length + 1}`;
+
+    // Prevent silent overwrite of existing profile
+    if (allProfiles.includes(autoName)) {
+      logError(
+        `profile "${autoName}" 已存在，不能覆盖。\n` +
+        `   👉 用新名字: wechat-channel new <其他名字>\n` +
+        `   👉 如要删除旧的: rm -rf ${path.join(PROFILES_DIR, autoName)}`
+      );
+      process.exit(1);
+    }
+
     log(`设置新 profile: ${autoName}`);
 
     const setupDir = path.join(HOME, ".claude", "channels", "wechat");
