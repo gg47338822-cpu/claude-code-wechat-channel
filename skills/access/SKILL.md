@@ -35,6 +35,8 @@ Check current connection:
 Create a new WeChat profile from scratch. Guide the user through these steps:
 
 1. Ask for a profile name (e.g., "home", "work", "legal"). Must be a simple alphanumeric string.
+   - If the user doesn't provide a name or says "default": warn them that "default" profile already exists and will be overwritten. Ask them to confirm or choose a different name.
+   - If a profile with the given name already exists (check if `~/.claude/channels/wechat/profiles/<name>/profile.json` exists): warn the user and ask to confirm overwrite or choose a different name.
 2. Ask for the working directory where this Claude instance should operate (e.g., ~/Documents/my-project)
 3. Ask for an identity description — who should Claude be when replying via this profile? (e.g., "You are Jason's personal assistant. Speak Chinese. Be warm and concise.")
 4. Ask for behavior rules (optional) — any rules Claude must follow (e.g., "Never share private info")

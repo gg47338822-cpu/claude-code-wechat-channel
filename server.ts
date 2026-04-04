@@ -21,7 +21,7 @@ import { startPolling } from "./src/polling.js";
 const PROFILE_NAME = resolveProfileName();
 const paths = getProfilePaths(PROFILE_NAME);
 ensureDirectories(paths);
-acquireLock(paths.pidFile);
+const lockResult = acquireLock(paths.pidFile);
 process.on("exit", () => releaseLock(paths.pidFile));
 cleanOldMedia(paths.mediaDir);
 
@@ -327,11 +327,25 @@ async function main() {
   }
 
   await mcp.connect(new StdioServerTransport());
-  log("MCP 连接就绪");
-  log(`Profile: ${PROFILE_NAME}`);
-  log(`目录: ${paths.credentialsDir}`);
 
+  // ── Startup summary ──
+  if (lockResult.recovered) {
+    log(`⚠ 上次未正常退出（进程 ${lockResult.stalePid} 已不存在），已自动恢复`);
+  }
   const account = loadCredentials(paths.credentialsFile);
+  const lastActivity = (() => {
+    try { return fs.readFileSync(paths.lastActivityFile, "utf-8").trim(); } catch { return null; }
+  })();
+  const profileConfig = loadProfileConfig(paths.profileConfigFile);
+  const summaryParts = [
+    `v${CHANNEL_VERSION}`,
+    `Profile: ${PROFILE_NAME}`,
+    account ? `账号: ${account.accountId}` : "未登录",
+    lastActivity ? `上次活动: ${new Date(Number(lastActivity)).toLocaleString("zh-CN")}` : null,
+    profileConfig.allow_from?.length ? `白名单: ${profileConfig.allow_from.length}人` : null,
+  ].filter(Boolean);
+  log(summaryParts.join(" | "));
+
   if (!account) {
     log("未找到凭据，发送引导通知...");
     // Send a channel notification to trigger Claude's onboarding flow

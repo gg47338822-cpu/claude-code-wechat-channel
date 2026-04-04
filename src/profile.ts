@@ -88,7 +88,9 @@ export function isPaused(pausedFile: string): boolean {
 
 // ── Process lock ───────────────────────────────────────────────────────────
 
-export function acquireLock(pidFile: string): void {
+export function acquireLock(pidFile: string): { recovered: boolean; stalePid?: number } {
+  let recovered = false;
+  let stalePid: number | undefined;
   try {
     const existing = fs.readFileSync(pidFile, "utf-8").trim();
     const pid = parseInt(existing, 10);
@@ -103,14 +105,13 @@ export function acquireLock(pidFile: string): void {
         process.exit(1);
       } catch {
         // Process not running — stale lock, clean it up
-        process.stderr.write(
-          `[wechat] 上次未正常退出（进程 ${pid} 已不存在），已自动恢复。\n` +
-          `[wechat] 消息从断点继续，无需重新扫码。\n`
-        );
+        recovered = true;
+        stalePid = pid;
       }
     }
   } catch { /* no lock file */ }
   fs.writeFileSync(pidFile, String(process.pid), "utf-8");
+  return { recovered, stalePid };
 }
 
 export function releaseLock(pidFile: string): void {
