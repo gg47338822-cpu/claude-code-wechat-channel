@@ -199,6 +199,8 @@ function ensureMcpConfig(dir: string): void {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(mcpFile, JSON.stringify(config, null, 2));
     log(`.mcp.json 已更新: ${mcpFile}`);
+  } else {
+    log(`.mcp.json 已就绪: ${mcpFile}`);
   }
 }
 

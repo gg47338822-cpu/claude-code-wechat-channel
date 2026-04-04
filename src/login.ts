@@ -5,9 +5,8 @@
 import http from "node:http";
 import { execFileSync } from "node:child_process";
 import QRCode from "qrcode";
-import { apiFetch } from "./api.js";
 import { saveCredentials } from "./profile.js";
-import { BOT_TYPE, DEFAULT_BASE_URL, type AccountData, type QRCodeResponse, type QRStatusResponse } from "./types.js";
+import { BOT_TYPE, type AccountData, type QRCodeResponse, type QRStatusResponse } from "./types.js";
 
 const QR_SERVER_BASE_PORT = 9876;
 const QR_SERVER_MAX_PORT = 9886;
