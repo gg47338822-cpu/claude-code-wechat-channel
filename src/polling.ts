@@ -94,7 +94,7 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
       const isError = (resp.ret !== undefined && resp.ret !== 0) || (resp.errcode !== undefined && resp.errcode !== 0);
       if (isError) {
         consecutiveFailures++;
-        logError(`getUpdates 失败: ret=${resp.ret} errcode=${resp.errcode} errmsg=${resp.errmsg ?? ""}`);
+        logError(`消息拉取失败: ret=${resp.ret} errcode=${resp.errcode} errmsg=${resp.errmsg ?? ""}`);
 
         const isAuthError = resp.errcode === 401 || resp.errcode === 403 || resp.errcode === -14
           || resp.ret === -1
@@ -102,7 +102,7 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
           || (resp.errmsg ?? "").toLowerCase().includes("session");
 
         if (isAuthError && consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-          logError("Token 过期，启动重新登录...");
+          logError("登录已过期，正在重新连接...");
           // Notify user via WeChat before re-login (best-effort with current token)
           try {
             const profileConfig = loadProfileConfig(paths.profileConfigFile);
@@ -235,13 +235,13 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
           mcpFailures = 0;
         } catch (mcpErr) {
           mcpFailures++;
-          logError(`MCP 通知失败 (${mcpFailures}/3): ${mcpErr}`);
-          if (mcpFailures >= 3) { logError("MCP 连接断开，退出。"); process.exit(1); }
+          logError(`消息转发失败 (${mcpFailures}/3): ${mcpErr}`);
+          if (mcpFailures >= 3) { logError("与 Claude 的连接断开，程序退出。请重新运行 wechat-channel"); process.exit(1); }
         }
       }
     } catch (err) {
       consecutiveFailures++;
-      logError(`轮询异常: ${String(err)}`);
+      logError(`消息接收异常: ${String(err)}`);
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
         try {
           const profileConfig = loadProfileConfig(paths.profileConfigFile);

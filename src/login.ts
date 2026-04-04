@@ -221,7 +221,7 @@ export async function doQRLoginWithWebServer(
             return;
           }
           // Don't exit on expired — let the web page auto-refresh via /qr-refresh
-        } catch (err) { log(`QR 轮询异常: ${String(err)}`); }
+        } catch (err) { log(`扫码状态查询异常: ${String(err)}`); }
         await new Promise((r) => setTimeout(r, 2000));
       }
       if (!loginResolved) { loginResolved = true; server.close(); resolve(null); }

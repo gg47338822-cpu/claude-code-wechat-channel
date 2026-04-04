@@ -9,7 +9,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
-import { CHANNEL_NAME, CHANNEL_VERSION, DEFAULT_BASE_URL, type AccountData } from "./src/types.js";
+import { CHANNEL_NAME, CHANNEL_VERSION, DEFAULT_BASE_URL, type AccountData, type ProfileConfig } from "./src/types.js";
 import { resolveProfileName, getProfilePaths, ensureDirectories, loadCredentials, loadProfileConfig, isPaused, acquireLock, releaseLock, cleanOldMedia, loadAllMemory } from "./src/profile.js";
 import { sendTextMessage, sendImageMessage, sendFileMessage } from "./src/message.js";
 import { doQRLogin, doQRLoginWithWebServer } from "./src/login.js";
@@ -49,30 +49,26 @@ function buildInstructions(): string {
       "IMMEDIATELY call `wechat_login` tool. Browser opens QR page.",
       "Tell user: please scan with WeChat app.",
       "",
-      "## Step 2: Get user's WeChat ID (in terminal)",
-      "After login succeeds, tell user in terminal:",
-      "  WeChat connected! Now send me a message on WeChat so I can identify you.",
-      "Wait for a <channel> notification. The sender_id is the user's WeChat ID. Remember it.",
-      "",
-      "## Step 3: Onboarding ON WECHAT (use wechat_reply tool for ALL replies)",
+      "## Step 2: Onboarding ON WECHAT (use wechat_reply tool for ALL replies)",
+      "After login succeeds, the scanned user's WeChat ID is automatically added to the allow list.",
       "From here, talk to user ONLY through WeChat using `wechat_reply` tool.",
       "Do NOT type responses in terminal. Use wechat_reply for every message.",
       "",
-      "3a. wechat_reply: Hi! I'm your WeChat assistant. What role should I play? (e.g. personal assistant, tutor, friend) And what language/style do you prefer?",
-      "3b. After user answers, wechat_reply: Where should I store our conversation memory? Your home folder, or a specific project folder?",
-      "3c. After user answers, wechat_reply: Got it. I'll only respond to messages from you. Want to add anyone else?",
+      "2a. wechat_reply: Hi! I'm your WeChat assistant. What role should I play? (e.g. personal assistant, tutor, friend) And what language/style do you prefer?",
+      "2b. After user answers, wechat_reply: Where should I store our conversation memory? Your home folder, or a specific project folder?",
+      "2c. After user answers, wechat_reply: Got it. I'll only respond to messages from you. Want to add anyone else?",
       "",
-      "## Step 4: Save config (silently)",
+      "## Step 3: Save config (silently)",
       `Write to: ${paths.profileConfigFile}`,
-      '{"identity":"<from 3a>","rules":"<from 3a>","workdir":"<from 3b>","allow_from":["<sender_id from step 2>"]}',
+      `The allow_from already contains the user's ID from login. Add identity, rules, workdir from the conversation.`,
       `Ensure dirs: ${paths.memoryDir}, ${paths.mediaDir}`,
       "",
-      "## Step 5: Confirm on WeChat",
+      "## Step 4: Confirm on WeChat",
       "wechat_reply: All set! Just chat with me here from now on.",
       "In terminal: show config summary.",
       "",
       "## Rules",
-      "- Steps 1-2: terminal. Steps 3-5: WeChat via wechat_reply.",
+      "- Step 1: terminal. Steps 2-4: WeChat via wechat_reply.",
       "- All WeChat messages must be plain text, no markdown.",
       "- Speak Chinese. Be warm and concise.",
     );
@@ -222,6 +218,18 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     const account = await doQRLoginWithWebServer(DEFAULT_BASE_URL, PROFILE_NAME, paths.credentialsFile, log);
     if (account) {
       activeAccount = account;
+
+      // Auto-set allow_from from scanned user's ID
+      if (account.userId) {
+        const config = loadProfileConfig(paths.profileConfigFile);
+        const allowList = config.allow_from ?? [];
+        if (!allowList.includes(account.userId)) {
+          config.allow_from = [account.userId, ...allowList];
+          fs.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
+          log(`白名单已自动添加扫码用户: ${account.userId}`);
+        }
+      }
+
       // Start polling in background (don't await — let the tool return immediately)
       if (!pollingActive) {
         pollingActive = true;
@@ -231,7 +239,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           log, logError,
         }).catch((err) => { logError(`❌ 消息接收异常，程序已退出: ${err}`); process.exit(1); });
       }
-      return { content: [{ type: "text" as const, text: `登录成功！账号: ${account.accountId}，Profile: ${PROFILE_NAME}。微信消息监听已启动。` }] };
+      return { content: [{ type: "text" as const, text: `登录成功！账号: ${account.accountId}，Profile: ${PROFILE_NAME}。微信消息监听已启动。扫码用户已自动加入白名单。` }] };
     }
     return { content: [{ type: "text" as const, text: "登录失败或超时。请重试。" }] };
   }
