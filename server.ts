@@ -229,7 +229,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           mcp, profileName: PROFILE_NAME, paths, contextTokens,
           setActiveAccount: (a) => { activeAccount = a; },
           log, logError,
-        }).catch((err) => { logError(`Polling fatal: ${err}`); process.exit(1); });
+        }).catch((err) => { logError(`❌ 消息接收异常，程序已退出: ${err}`); process.exit(1); });
       }
       return { content: [{ type: "text" as const, text: `登录成功！账号: ${account.accountId}，Profile: ${PROFILE_NAME}。微信消息监听已启动。` }] };
     }
@@ -251,7 +251,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     return { content: [{ type: "text" as const, text: JSON.stringify(status, null, 2) }] };
   }
 
-  if (!activeAccount) return { content: [{ type: "text" as const, text: "error: not logged in. Use wechat_login to connect." }] };
+  if (!activeAccount) return { content: [{ type: "text" as const, text: "❌ 未登录微信，请先调用 wechat_login 扫码连接" }] };
 
   const { baseUrl, token } = activeAccount;
   const args = (req.params.arguments ?? {}) as Record<string, unknown>;
@@ -262,7 +262,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   const ct = contextTokens.get(senderId);
 
   if (!ct) {
-    return { content: [{ type: "text" as const, text: `error: no context_token for ${senderId}. User must send a message first.` }] };
+    return { content: [{ type: "text" as const, text: `❌ 无法回复 ${senderId}，请让对方先发一条消息` }] };
   }
 
   try {

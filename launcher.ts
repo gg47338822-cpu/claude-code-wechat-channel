@@ -19,17 +19,61 @@ const PROFILES_DIR = path.join(HOME, ".claude", "channels", "wechat", "profiles"
 const PLUGIN_ROOT = path.resolve(import.meta.dirname || path.dirname(new URL(import.meta.url).pathname), "..");
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
+// ── Old package names (for migration) ────────────────────────────────────
+
+const OLD_PACKAGE_NAMES = [
+  "@xiaoyifu_0000/wechat-channel",
+];
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function log(msg: string) { process.stderr.write(`[launcher] ${msg}\n`); }
 function logError(msg: string) { process.stderr.write(`[launcher] ERROR: ${msg}\n`); }
+
+/**
+ * Pre-flight environment checks. Prints human-readable errors and exits
+ * if critical dependencies are missing.
+ */
+function preflight(): void {
+  const errors: string[] = [];
+
+  // Node.js version check
+  const [major] = process.versions.node.split(".").map(Number);
+  if (major < 18) {
+    errors.push(
+      `❌ Node.js 版本太低（当前 v${process.versions.node}，需要 v18 以上）`,
+      `   👉 去 https://nodejs.org 下载最新版`,
+    );
+  }
+
+  // Claude Code existence check
+  let claudeFound = false;
+  try {
+    const p = execFileSync("which", ["claude"], { encoding: "utf-8", timeout: 3000 }).trim();
+    if (p) claudeFound = true;
+  } catch {}
+  if (!claudeFound) {
+    errors.push(
+      `❌ 未检测到 Claude Code`,
+      `   👉 安装: npm install -g @anthropic-ai/claude-code`,
+    );
+  }
+
+  if (errors.length > 0) {
+    process.stderr.write("\n环境检查未通过:\n\n");
+    for (const line of errors) process.stderr.write(`${line}\n`);
+    process.stderr.write("\n");
+    process.exit(1);
+  }
+}
 
 function resolveClaudePath(): string {
   try {
     const p = execFileSync("which", ["claude"], { encoding: "utf-8", timeout: 3000 }).trim();
     if (p) return p;
   } catch {}
-  logError("未找到 claude 命令。请先安装 Claude Code: https://docs.anthropic.com/claude-code");
+  // Should not reach here after preflight, but keep as safeguard
+  logError("未找到 claude 命令");
   process.exit(1);
 }
 
@@ -55,6 +99,72 @@ function loadProfileConfig(profileName: string): { workdir?: string } {
 }
 
 /**
+ * Migrate old package names in a .mcp.json file.
+ * Returns true if any migration was performed.
+ */
+function migrateOldPackageNames(mcpFile: string): boolean {
+  try {
+    if (!fs.existsSync(mcpFile)) return false;
+    const raw = fs.readFileSync(mcpFile, "utf-8");
+    const config = JSON.parse(raw);
+    if (!config.mcpServers) return false;
+
+    let migrated = false;
+    const servers = config.mcpServers as Record<string, { command?: string; args?: string[] }>;
+
+    for (const [key, value] of Object.entries(servers)) {
+      if (!value?.args) continue;
+      const argsStr = value.args.join(" ");
+      for (const oldName of OLD_PACKAGE_NAMES) {
+        if (argsStr.includes(oldName)) {
+          // Remove the old entry; ensureMcpConfig will add the correct one
+          delete servers[key];
+          log(`迁移: ${mcpFile} 中移除旧包名 "${oldName}" (key: ${key})`);
+          migrated = true;
+          break;
+        }
+      }
+    }
+
+    if (migrated) {
+      fs.writeFileSync(mcpFile, JSON.stringify(config, null, 2));
+    }
+    return migrated;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Scan common .mcp.json locations for old package names and migrate them.
+ */
+function migrateAllMcpConfigs(): void {
+  const locations = new Set<string>();
+
+  // Home directory
+  locations.add(path.join(HOME, ".mcp.json"));
+
+  // All profile workdirs
+  for (const name of discoverProfiles()) {
+    const config = loadProfileConfig(name);
+    if (config.workdir) {
+      locations.add(path.join(config.workdir, ".mcp.json"));
+    }
+  }
+
+  // Wechat channel directory
+  locations.add(path.join(HOME, ".claude", "channels", "wechat", ".mcp.json"));
+
+  let total = 0;
+  for (const loc of locations) {
+    if (migrateOldPackageNames(loc)) total++;
+  }
+  if (total > 0) {
+    log(`已迁移 ${total} 个 .mcp.json 文件中的旧包名`);
+  }
+}
+
+/**
  * Ensure .mcp.json in a directory contains the wechat MCP server entry.
  * Merges into existing config — never overwrites other servers.
  * Uses local dist path instead of npx for speed and consistency.
@@ -66,7 +176,13 @@ function ensureMcpConfig(dir: string): void {
     if (fs.existsSync(mcpFile)) {
       config = JSON.parse(fs.readFileSync(mcpFile, "utf-8"));
     }
-  } catch { /* corrupted file, start fresh */ }
+  } catch {
+    // Corrupted file — backup before overwriting
+    try {
+      fs.copyFileSync(mcpFile, `${mcpFile}.bak`);
+      log(`⚠️ ${mcpFile} 格式损坏，已备份为 .mcp.json.bak`);
+    } catch {}
+  }
 
   if (!config.mcpServers) config.mcpServers = {};
 
@@ -108,10 +224,21 @@ function launchClaude(claudePath: string, cwd: string, env: Record<string, strin
 // ── Main ──────────────────────────────────────────────────────────────────
 
 function main() {
+  preflight();
+
   const args = process.argv.slice(2);
   const claudePath = resolveClaudePath();
   log(`Claude: ${claudePath}`);
   log(`Plugin: ${PLUGIN_ROOT}`);
+
+  // Migrate old package names before anything else
+  migrateAllMcpConfigs();
+
+  // Upgrade-only mode: just run migration and exit
+  if (process.env.WECHAT_UPGRADE_ONLY === "1") {
+    log("升级检查完成");
+    process.exit(0);
+  }
 
   const allProfiles = discoverProfiles();
   const setupNew = process.env.WECHAT_SETUP_NEW;

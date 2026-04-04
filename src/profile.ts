@@ -95,9 +95,16 @@ export function acquireLock(pidFile: string): void {
     if (pid && pid !== process.pid) {
       try {
         process.kill(pid, 0);
-        process.stderr.write(`另一个 channel 进程已在运行 (PID ${pid})，退出。\n`);
+        process.stderr.write(
+          `❌ 微信插件已经在运行中（进程号: ${pid}）\n` +
+          `   👉 如果要重新启动，请先运行: kill ${pid}\n` +
+          `   👉 如果确认没有在运行，请删除锁文件: rm ${pidFile}\n`
+        );
         process.exit(1);
-      } catch { /* stale lock */ }
+      } catch {
+        // Process not running — stale lock, clean it up
+        process.stderr.write(`[wechat] 发现残留锁文件（进程 ${pid} 已不存在），已自动清理\n`);
+      }
     }
   } catch { /* no lock file */ }
   fs.writeFileSync(pidFile, String(process.pid), "utf-8");

@@ -159,7 +159,9 @@ export async function doQRLoginWithWebServer(
         const actualPort = typeof addr === "object" && addr ? addr.port : port;
         log(`二维码页面: http://localhost:${actualPort}`);
         const openCmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-        try { execFileSync(openCmd, [`http://localhost:${actualPort}`]); } catch {}
+        try { execFileSync(openCmd, [`http://localhost:${actualPort}`]); } catch {
+          log(`如果浏览器没有自动打开，请手动访问: http://localhost:${actualPort}`);
+        }
         startPolling();
       });
     }

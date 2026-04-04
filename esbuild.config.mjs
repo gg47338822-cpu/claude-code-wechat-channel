@@ -31,6 +31,9 @@ if (cmd === "start") {
 } else if (cmd === "run") {
   process.env.WECHAT_RUN_PROFILE = process.argv[3] || "";
   import("./launcher.js");
+} else if (cmd === "upgrade") {
+  process.env.WECHAT_UPGRADE_ONLY = "1";
+  import("./launcher.js");
 } else {
   import("./launcher.js");
 }
