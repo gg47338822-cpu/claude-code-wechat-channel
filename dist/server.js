@@ -1,6 +1,6 @@
 // server.ts
-import fs5 from "node:fs";
-import path3 from "node:path";
+import fs6 from "node:fs";
+import path4 from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -1124,6 +1124,70 @@ async function startPolling(account, deps) {
   }
 }
 
+// src/mailbox.ts
+import fs5 from "node:fs";
+import path3 from "node:path";
+var MAILBOX_PATH = path3.join(process.env.HOME || "", ".claude", "mailbox.jsonl");
+var POLL_INTERVAL_MS = 3e3;
+function formatMailboxMsg(entry) {
+  const prefix = entry.level === "error" ? "[\u7D27\u6025] " : "";
+  return `${prefix}[${entry.from}] ${entry.msg}`;
+}
+function startMailboxWatcher(getAccount, contextTokens2, recipientId, log3) {
+  if (!recipientId) {
+    log3("mailbox-watcher: \u65E0\u53D1\u9001\u76EE\u6807\uFF08allow_from\u4E3A\u7A7A\uFF09\uFF0C\u8DF3\u8FC7");
+    return;
+  }
+  let offset = 0;
+  try {
+    if (fs5.existsSync(MAILBOX_PATH)) {
+      const stat = fs5.statSync(MAILBOX_PATH);
+      offset = stat.size;
+    }
+  } catch {
+  }
+  log3(`mailbox-watcher: \u542F\u52A8\u76D1\u542C (offset=${offset})`);
+  const timer = setInterval(() => {
+    try {
+      if (!fs5.existsSync(MAILBOX_PATH)) return;
+      const stat = fs5.statSync(MAILBOX_PATH);
+      if (stat.size < offset) {
+        offset = 0;
+      }
+      if (stat.size <= offset) return;
+      const fd = fs5.openSync(MAILBOX_PATH, "r");
+      const buf = Buffer.alloc(stat.size - offset);
+      fs5.readSync(fd, buf, 0, buf.length, offset);
+      fs5.closeSync(fd);
+      offset = stat.size;
+      const newContent = buf.toString("utf-8");
+      const lines = newContent.split("\n").filter((l) => l.trim());
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+          if (!entry.cc?.includes("\u5C0F\u8863\u670D")) continue;
+          const account = getAccount();
+          if (!account) {
+            log3("mailbox-watcher: \u672A\u767B\u5F55\uFF0C\u8DF3\u8FC7\u901A\u77E5");
+            continue;
+          }
+          const ct = contextTokens2.get(recipientId);
+          if (!ct) {
+            log3("mailbox-watcher: \u65E0 context_token\uFF0C\u8DF3\u8FC7\u901A\u77E5");
+            continue;
+          }
+          const text = formatMailboxMsg(entry);
+          sendTextMessage(account.baseUrl, account.token, recipientId, text, ct).then(() => log3(`mailbox-watcher: \u5DF2\u63A8\u9001 [${entry.from}] ${entry.task_id || ""}`)).catch((err) => log3(`mailbox-watcher: \u63A8\u9001\u5931\u8D25: ${String(err)}`));
+        } catch {
+        }
+      }
+    } catch (err) {
+      log3(`mailbox-watcher: \u8BFB\u53D6\u5F02\u5E38: ${String(err)}`);
+    }
+  }, POLL_INTERVAL_MS);
+  timer.unref();
+}
+
 // server.ts
 var PROFILE_NAME = resolveProfileName();
 var paths = getProfilePaths(PROFILE_NAME);
@@ -1142,7 +1206,7 @@ function logError(msg) {
 }
 function buildInstructions() {
   const profileConfig = loadProfileConfig(paths.profileConfigFile);
-  const hasCredentials = fs5.existsSync(paths.credentialsFile);
+  const hasCredentials = fs6.existsSync(paths.credentialsFile);
   const parts = [];
   if (!hasCredentials) {
     parts.push(
@@ -1318,12 +1382,14 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         const allowList = config.allow_from ?? [];
         if (!allowList.includes(account.userId)) {
           config.allow_from = [account.userId, ...allowList];
-          fs5.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
+          fs6.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
           log2(`\u767D\u540D\u5355\u5DF2\u81EA\u52A8\u6DFB\u52A0\u626B\u7801\u7528\u6237: ${account.userId}`);
         }
       }
       if (!pollingActive) {
         pollingActive = true;
+        const config = loadProfileConfig(paths.profileConfigFile);
+        startMailboxWatcher(() => activeAccount, contextTokens, config.allow_from?.[0] ?? null, log2);
         startPolling(account, {
           mcp,
           profileName: PROFILE_NAME,
@@ -1346,7 +1412,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name === "wechat_status") {
     const lastActivity = (() => {
       try {
-        return fs5.readFileSync(paths.lastActivityFile, "utf-8").trim();
+        return fs6.readFileSync(paths.lastActivityFile, "utf-8").trim();
       } catch {
         return null;
       }
@@ -1389,31 +1455,31 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
       let filePath;
       try {
-        filePath = fs5.realpathSync(path3.resolve(rawPath));
+        filePath = fs6.realpathSync(path4.resolve(rawPath));
       } catch {
-        return { content: [{ type: "text", text: `\u274C \u6587\u4EF6\u4E0D\u5B58\u5728: ${path3.basename(rawPath)}` }] };
+        return { content: [{ type: "text", text: `\u274C \u6587\u4EF6\u4E0D\u5B58\u5728: ${path4.basename(rawPath)}` }] };
       }
       const allowedRoots = [process.cwd(), process.env.HOME || "", paths.mediaDir].filter(Boolean).map((p) => {
         try {
-          return fs5.realpathSync(p);
+          return fs6.realpathSync(p);
         } catch {
-          return path3.resolve(p);
+          return path4.resolve(p);
         }
       });
-      if (!allowedRoots.some((root) => filePath.startsWith(root + path3.sep) || filePath === root)) {
+      if (!allowedRoots.some((root) => filePath.startsWith(root + path4.sep) || filePath === root)) {
         return { content: [{ type: "text", text: "\u274C \u6587\u4EF6\u8DEF\u5F84\u4E0D\u5728\u5141\u8BB8\u8303\u56F4\u5185" }] };
       }
-      const stat = fs5.statSync(filePath);
+      const stat = fs6.statSync(filePath);
       const maxSize = req.params.name === "wechat_send_image" ? 10 * 1024 * 1024 : 20 * 1024 * 1024;
       if (stat.size > maxSize) return { content: [{ type: "text", text: `\u274C \u6587\u4EF6\u592A\u5927\uFF08\u6700\u5927 ${maxSize / 1024 / 1024}MB\uFF09` }] };
-      const buf = fs5.readFileSync(filePath);
+      const buf = fs6.readFileSync(filePath);
       if (req.params.name === "wechat_send_image") {
         await sendImageMessage(baseUrl, token, senderId, buf, ct);
       } else {
-        await sendFileMessage(baseUrl, token, senderId, buf, path3.basename(filePath), ct);
+        await sendFileMessage(baseUrl, token, senderId, buf, path4.basename(filePath), ct);
       }
       onBotReply(senderId);
-      return { content: [{ type: "text", text: `file sent: ${path3.basename(rawPath)}` }] };
+      return { content: [{ type: "text", text: `file sent: ${path4.basename(rawPath)}` }] };
     }
   } catch (err) {
     return { content: [{ type: "text", text: `\u274C \u53D1\u9001\u5931\u8D25: ${String(err)}` }] };
@@ -1437,7 +1503,7 @@ async function main() {
       const allowList = config.allow_from ?? [];
       if (!allowList.includes(account2.userId)) {
         config.allow_from = [account2.userId, ...allowList];
-        fs5.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
+        fs6.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
         log2(`\u767D\u540D\u5355\u5DF2\u81EA\u52A8\u6DFB\u52A0\u626B\u7801\u7528\u6237: ${account2.userId}`);
       }
     }
@@ -1450,7 +1516,7 @@ async function main() {
   let account = loadCredentials(paths.credentialsFile);
   const lastActivity = (() => {
     try {
-      return fs5.readFileSync(paths.lastActivityFile, "utf-8").trim();
+      return fs6.readFileSync(paths.lastActivityFile, "utf-8").trim();
     } catch {
       return null;
     }
@@ -1481,6 +1547,8 @@ async function main() {
   }
   log2(`\u4F7F\u7528\u5DF2\u4FDD\u5B58\u8D26\u53F7: ${account.accountId}`);
   activeAccount = account;
+  const mailboxRecipient = profileConfig.allow_from?.[0] ?? null;
+  startMailboxWatcher(() => activeAccount, contextTokens, mailboxRecipient, log2);
   await startPolling(account, {
     mcp,
     profileName: PROFILE_NAME,

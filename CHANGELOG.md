@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.29 (2026-04-05)
+
+### New Features
+
+- **Mailbox Watcher**: 自动监听 `~/.claude/mailbox.jsonl`，分身干完活写的通知直接推送到Jason微信。不依赖任何CLI在线，不经过小衣服中转。
+
+### Details
+
+- 新增 `src/mailbox.ts` 模块，3秒轮询 mailbox.jsonl 新增行
+- 只推送 `cc` 包含"小衣服"的条目
+- 按 level 格式化：error 加"[紧急]"前缀，其他为"[分身名] 消息内容"
+- 通过当前 profile 的 iLink account 直接发送，发送目标为 allow_from 第一个用户
+- offset追踪避免重复发送，文件截断时自动重置
+- 启动时跳到文件末尾，只推新通知（不推历史）
+- timer.unref() 不阻止进程退出
+
 ## 1.0.28 (2026-04-05)
 
 ### Bug Fixes

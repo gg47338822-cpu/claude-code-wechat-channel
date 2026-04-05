@@ -15,6 +15,7 @@ import { sendTextMessage, sendImageMessage, sendFileMessage } from "./src/messag
 import { doQRLogin, doQRLoginWithWebServer } from "./src/login.js";
 import { ContextTokenCache, onBotReply } from "./src/state.js";
 import { startPolling } from "./src/polling.js";
+import { startMailboxWatcher } from "./src/mailbox.js";
 
 // ── Profile resolution ─────────────────────────────────────────────────────
 
@@ -233,6 +234,8 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       // Start polling in background (don't await — let the tool return immediately)
       if (!pollingActive) {
         pollingActive = true;
+        const config = loadProfileConfig(paths.profileConfigFile);
+        startMailboxWatcher(() => activeAccount, contextTokens, config.allow_from?.[0] ?? null, log);
         startPolling(account, {
           mcp, profileName: PROFILE_NAME, paths, contextTokens,
           setActiveAccount: (a) => { activeAccount = a; },
@@ -387,6 +390,11 @@ async function main() {
 
   log(`使用已保存账号: ${account.accountId}`);
   activeAccount = account;
+
+  // Start mailbox watcher (forwards分身notifications to Jason's WeChat)
+  const mailboxRecipient = profileConfig.allow_from?.[0] ?? null;
+  startMailboxWatcher(() => activeAccount, contextTokens, mailboxRecipient, log);
+
   await startPolling(account, {
     mcp,
     profileName: PROFILE_NAME,
