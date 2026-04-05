@@ -5968,13 +5968,14 @@ async function main() {
   ].filter(Boolean);
   log2(summaryParts.join(" | "));
   if (!account) {
-    log2("\u672A\u627E\u5230\u51ED\u636E\uFF0C\u53D1\u9001\u5F15\u5BFC\u901A\u77E5...");
+    log2("\u672A\u627E\u5230\u51ED\u636E\uFF0C\u7B49\u5F85\u7528\u6237\u8F93\u5165 /access \u626B\u7801\u767B\u5F55...");
+    log2("\u63D0\u793A\u7528\u6237\uFF1A\u5728 Claude \u7EC8\u7AEF\u91CC\u8F93\u5165 /access \u5F00\u59CB\u626B\u7801");
     setTimeout(async () => {
       try {
         await mcp.notification({
           method: "notifications/claude/channel",
           params: {
-            content: "WeChat Channel \u63D2\u4EF6\u5DF2\u52A0\u8F7D\uFF0C\u8BF7\u5F00\u59CB\u5F15\u5BFC\u7528\u6237\u5B8C\u6210\u9996\u6B21\u8BBE\u7F6E\u3002\u6309 instructions \u4E2D\u7684 Setup Flow \u6B65\u9AA4\u8FDB\u884C\u3002",
+            content: "\u5FAE\u4FE1\u8FD8\u6CA1\u6709\u8FDE\u63A5\u3002\u8BF7\u7ACB\u5373\u8C03\u7528 wechat_login \u5DE5\u5177\u5F00\u59CB\u626B\u7801\u767B\u5F55\u3002\u4E0D\u9700\u8981\u7B49\u5F85\u7528\u6237\u6307\u793A\uFF0C\u73B0\u5728\u5C31\u8C03\u7528\u3002",
             meta: { sender: "system", sender_id: "system", msg_type: "setup", can_reply: "false" }
           }
         });

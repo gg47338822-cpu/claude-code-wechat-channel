@@ -347,15 +347,15 @@ async function main() {
   log(summaryParts.join(" | "));
 
   if (!account) {
-    log("未找到凭据，发送引导通知...");
+    log("未找到凭据，等待用户输入 /access 扫码登录...");
+    log("提示用户：在 Claude 终端里输入 /access 开始扫码");
     // Send a channel notification to trigger Claude's onboarding flow
-    // (instructions alone are passive — Claude won't act until it sees a message)
     setTimeout(async () => {
       try {
         await mcp.notification({
           method: "notifications/claude/channel",
           params: {
-            content: "WeChat Channel 插件已加载，请开始引导用户完成首次设置。按 instructions 中的 Setup Flow 步骤进行。",
+            content: "微信还没有连接。请立即调用 wechat_login 工具开始扫码登录。不需要等待用户指示，现在就调用。",
             meta: { sender: "system", sender_id: "system", msg_type: "setup", can_reply: "false" },
           },
         });
