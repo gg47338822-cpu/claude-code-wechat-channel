@@ -17,13 +17,11 @@
     "LICENSE"
   ],
   "scripts": {
-    "prepare": "test -f server.ts && node esbuild.config.mjs || true",
     "build": "node esbuild.config.mjs",
     "start": "node dist/server.js",
     "dev": "npx tsx server.ts",
     "launch": "npx tsx launcher.ts",
-    "test": "npx tsx --test test/unit.test.ts",
-    "prepublishOnly": "npm run build"
+    "test": "npx tsx --test test/unit.test.ts"
   },
   "repository": {
     "type": "git",
@@ -32,12 +30,12 @@
   "homepage": "https://github.com/gg47338822-cpu/claude-code-wechat-channel#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "esbuild": "^0.25.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
     "typescript": "^5.7.0"
   },
   "engines": {
