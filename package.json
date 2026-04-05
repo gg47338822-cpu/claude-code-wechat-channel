@@ -17,7 +17,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "prepare": "node esbuild.config.mjs",
+    "prepare": "test -f server.ts && node esbuild.config.mjs || true",
     "build": "node esbuild.config.mjs",
     "start": "node dist/server.js",
     "dev": "npx tsx server.ts",
