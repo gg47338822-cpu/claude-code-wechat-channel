@@ -332,7 +332,7 @@ async function main() {
   if (lockResult.recovered) {
     log(`⚠ 上次未正常退出（进程 ${lockResult.stalePid} 已不存在），已自动恢复`);
   }
-  const account = loadCredentials(paths.credentialsFile);
+  let account = loadCredentials(paths.credentialsFile);
   const lastActivity = (() => {
     try { return fs.readFileSync(paths.lastActivityFile, "utf-8").trim(); } catch { return null; }
   })();
@@ -347,24 +347,36 @@ async function main() {
   log(summaryParts.join(" | "));
 
   if (!account) {
-    log("未找到凭据，等待用户输入 /access 扫码登录...");
-    log("提示用户：在 Claude 终端里输入 /access 开始扫码");
-    // Send a channel notification to trigger Claude's onboarding flow
-    setTimeout(async () => {
-      try {
-        await mcp.notification({
-          method: "notifications/claude/channel",
-          params: {
-            content: "微信还没有连接。请立即调用 wechat_login 工具开始扫码登录。不需要等待用户指示，现在就调用。",
-            meta: { sender: "system", sender_id: "system", msg_type: "setup", can_reply: "false" },
-          },
-        });
-      } catch (err) {
-        logError(`引导通知失败: ${err}`);
+    log("未找到凭据，直接启动扫码登录...");
+    const newAccount = await doQRLogin(DEFAULT_BASE_URL, paths.credentialsFile, log);
+    if (!newAccount) {
+      log("登录失败或超时。请重新启动重试。");
+      process.exit(1);
+    }
+    account = newAccount;
+    activeAccount = newAccount;
+
+    // Auto-set allow_from from scanned user's ID
+    if (newAccount.userId) {
+      const config = loadProfileConfig(paths.profileConfigFile);
+      const allowList = config.allow_from ?? [];
+      if (!allowList.includes(newAccount.userId)) {
+        config.allow_from = [newAccount.userId, ...allowList];
+        fs.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
+        log(`白名单已自动添加扫码用户: ${newAccount.userId}`);
       }
-    }, 1000);
-    // Keep the process alive waiting for tool calls
-    await new Promise(() => {});
+    }
+
+    // Notify Claude that login succeeded
+    try {
+      await mcp.notification({
+        method: "notifications/claude/channel",
+        params: {
+          content: `微信登录成功！账号: ${newAccount.accountId}，Profile: ${PROFILE_NAME}。消息监听已启动。`,
+          meta: { sender: "system", sender_id: "system", msg_type: "setup", can_reply: "false" },
+        },
+      });
+    } catch { /* notification失败不影响主流程 */ }
   }
 
   log(`使用已保存账号: ${account.accountId}`);
