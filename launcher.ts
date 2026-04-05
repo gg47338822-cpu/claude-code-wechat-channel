@@ -225,7 +225,7 @@ function launchClaude(claudePath: string, cwd: string, env: Record<string, strin
 
 // ── Main ──────────────────────────────────────────────────────────────────
 
-function main() {
+async function main() {
   preflight();
 
   const args = process.argv.slice(2);
@@ -262,8 +262,44 @@ function main() {
 
     log(`设置新 profile: ${autoName}`);
 
-    const setupDir = path.join(HOME, ".claude", "channels", "wechat");
+    // 1. 创建profile目录
+    const profileDir = path.join(PROFILES_DIR, autoName);
+    fs.mkdirSync(path.join(profileDir, "memory"), { recursive: true });
+    fs.mkdirSync(path.join(profileDir, "media"), { recursive: true });
+    log(`profile目录已创建: ${profileDir}`);
 
+    // 2. 先扫码登录（spawn子进程跑server.js --login-only）
+    const serverJs = path.join(PLUGIN_ROOT, "dist", "server.js");
+    log("启动扫码登录...");
+    const loginCode = await new Promise<number>((resolve) => {
+      const child = spawn("node", [serverJs], {
+        cwd: path.join(HOME, ".claude", "channels", "wechat"),
+        env: {
+          ...process.env,
+          WECHAT_CHANNEL_PROFILE: autoName,
+          WECHAT_LOGIN_ONLY: "1",
+        },
+        stdio: "inherit",
+      });
+      child.on("exit", (code) => resolve(code ?? 1));
+    });
+
+    if (loginCode !== 0) {
+      logError("登录失败或超时。请重新运行 wechat-channel new " + autoName);
+      process.exit(1);
+    }
+
+    // 验证凭据已保存
+    const credentialsFile = path.join(profileDir, "account.json");
+    if (!fs.existsSync(credentialsFile)) {
+      logError("扫码流程结束但未保存凭据。请重试。");
+      process.exit(1);
+    }
+    log("登录成功！");
+
+    // 3. 启动Claude
+    log("正在启动Claude...");
+    const setupDir = path.join(HOME, ".claude", "channels", "wechat");
     const proc = launchClaude(claudePath, setupDir, {
       WECHAT_CHANNEL_PROFILE: autoName,
     });
@@ -340,4 +376,4 @@ function main() {
   process.on("SIGTERM", shutdown);
 }
 
-main();
+main().catch((err) => { logError(`Fatal: ${String(err)}`); process.exit(1); });

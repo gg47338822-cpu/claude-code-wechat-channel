@@ -161,7 +161,7 @@ function launchClaude(claudePath, cwd, env, extraArgs = []) {
     stdio: "inherit"
   });
 }
-function main() {
+async function main() {
   preflight();
   const args = process.argv.slice(2);
   const claudePath = resolveClaudePath();
@@ -186,6 +186,35 @@ function main() {
       process.exit(1);
     }
     log(`\u8BBE\u7F6E\u65B0 profile: ${autoName}`);
+    const profileDir = path.join(PROFILES_DIR, autoName);
+    fs.mkdirSync(path.join(profileDir, "memory"), { recursive: true });
+    fs.mkdirSync(path.join(profileDir, "media"), { recursive: true });
+    log(`profile\u76EE\u5F55\u5DF2\u521B\u5EFA: ${profileDir}`);
+    const serverJs = path.join(PLUGIN_ROOT, "dist", "server.js");
+    log("\u542F\u52A8\u626B\u7801\u767B\u5F55...");
+    const loginCode = await new Promise((resolve) => {
+      const child = spawn("node", [serverJs], {
+        cwd: path.join(HOME, ".claude", "channels", "wechat"),
+        env: {
+          ...process.env,
+          WECHAT_CHANNEL_PROFILE: autoName,
+          WECHAT_LOGIN_ONLY: "1"
+        },
+        stdio: "inherit"
+      });
+      child.on("exit", (code) => resolve(code ?? 1));
+    });
+    if (loginCode !== 0) {
+      logError("\u767B\u5F55\u5931\u8D25\u6216\u8D85\u65F6\u3002\u8BF7\u91CD\u65B0\u8FD0\u884C wechat-channel new " + autoName);
+      process.exit(1);
+    }
+    const credentialsFile = path.join(profileDir, "account.json");
+    if (!fs.existsSync(credentialsFile)) {
+      logError("\u626B\u7801\u6D41\u7A0B\u7ED3\u675F\u4F46\u672A\u4FDD\u5B58\u51ED\u636E\u3002\u8BF7\u91CD\u8BD5\u3002");
+      process.exit(1);
+    }
+    log("\u767B\u5F55\u6210\u529F\uFF01");
+    log("\u6B63\u5728\u542F\u52A8Claude...");
     const setupDir = path.join(HOME, ".claude", "channels", "wechat");
     const proc = launchClaude(claudePath, setupDir, {
       WECHAT_CHANNEL_PROFILE: autoName
@@ -261,4 +290,7 @@ function main() {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 }
-main();
+main().catch((err) => {
+  logError(`Fatal: ${String(err)}`);
+  process.exit(1);
+});

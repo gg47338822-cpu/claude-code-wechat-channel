@@ -2,12 +2,20 @@ import { build } from "esbuild";
 
 import fs from "node:fs";
 
+import module from "node:module";
+
 const shared = {
   bundle: true,
   platform: "node",
   target: "node18",
   format: "esm",
-  external: ["@modelcontextprotocol/sdk"],
+  external: [
+    "@modelcontextprotocol/sdk",
+    "qrcode",
+    "qrcode-terminal",
+    ...module.builtinModules,
+    ...module.builtinModules.map(m => `node:${m}`),
+  ],
 };
 
 const entries = [
@@ -16,6 +24,10 @@ const entries = [
 
 if (fs.existsSync("launcher.ts")) {
   entries.push({ entryPoints: ["launcher.ts"], outfile: "dist/launcher.js" });
+}
+
+if (fs.existsSync("dashboard.ts")) {
+  entries.push({ entryPoints: ["dashboard.ts"], outfile: "dist/dashboard.js" });
 }
 
 await Promise.all(entries.map(e => build({ ...shared, ...e })));
@@ -35,7 +47,7 @@ if (cmd === "start") {
   process.env.WECHAT_UPGRADE_ONLY = "1";
   import("./launcher.js");
 } else {
-  import("./launcher.js");
+  import("./dashboard.js");
 }
 `);
 fs.chmodSync("dist/cli.js", 0o755);

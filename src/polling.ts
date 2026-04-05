@@ -14,6 +14,7 @@ import { type ContextTokenCache, onUserMessage } from "./state.js";
 // ── Constants ─────────────────────────────────────────────────────────────
 
 const MAX_CONSECUTIVE_FAILURES = 3;
+const MAX_MEDIA_FAILURES = 3;
 const BACKOFF_DELAY_MS = 30_000;
 const RETRY_DELAY_MS = 2_000;
 
@@ -43,6 +44,7 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
   let { baseUrl, token } = account;
   let getUpdatesBuf = "";
   let consecutiveFailures = 0;
+  let consecutiveMediaFailures = 0;
   let mcpFailures = 0;
 
   // Restore sync state
@@ -159,11 +161,13 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
         const extracted = extractContent(msg);
         if (!extracted) continue;
 
-        // Download media
+        // Download media (with token degradation detection)
         if (extracted.mediaItem) {
           const mi = extracted.mediaItem as Record<string, unknown>;
-          const { encryptQueryParam, aesKeyBase64 } = resolveMediaDownloadInfo(mi);
+          let { encryptQueryParam, aesKeyBase64 } = resolveMediaDownloadInfo(mi);
+
           if (encryptQueryParam && aesKeyBase64) {
+            consecutiveMediaFailures = 0;
             const cdnUrl = buildCdnDownloadUrl(encryptQueryParam);
             let fileName = extracted.msgType === "file" && typeof mi.file_name === "string" ? mi.file_name
               : extracted.msgType === "image" ? "image.jpg"
@@ -174,6 +178,42 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
               extracted.localPath = localPath;
               extracted.text = `[${extracted.msgType} 已保存到 ${localPath}]`;
             }
+          } else {
+            // Media item present but no download info — token media permission degraded
+            consecutiveMediaFailures++;
+            logError(`媒体数据缺失 (${consecutiveMediaFailures}/${MAX_MEDIA_FAILURES}): ${extracted.msgType} 无 encrypt_query_param/aes_key`);
+
+            if (consecutiveMediaFailures >= MAX_MEDIA_FAILURES) {
+              log("媒体 token 可能已降级，正在自动重新登录...");
+              // Notify user
+              try {
+                const ct = contextTokens.get(msg.from_user_id) || contextTokens.get(msg.group_id || "");
+                if (ct) {
+                  await sendTextMessage(baseUrl, token, msg.from_user_id,
+                    `[${profileName}] 媒体权限过期，正在自动重新登录，请稍候...`, ct);
+                }
+              } catch { /* best-effort */ }
+
+              const newAccount = await doQRLoginWithWebServer(baseUrl, profileName, paths.credentialsFile, log);
+              if (newAccount) {
+                token = newAccount.token;
+                baseUrl = newAccount.baseUrl;
+                setActiveAccount(newAccount);
+                consecutiveMediaFailures = 0;
+                log("媒体 token 刷新完成，重试下载...");
+
+                // Retry this media with new token — re-fetch won't help since the msg data is from old API response
+                // But notify user the fix is in place for next messages
+                try {
+                  const ct = contextTokens.get(msg.from_user_id) || contextTokens.get(msg.group_id || "");
+                  if (ct) {
+                    await sendTextMessage(baseUrl, token, msg.from_user_id,
+                      `[${profileName}] 重新登录成功，后续媒体消息恢复正常。刚才的${extracted.msgType}请重新发送。`, ct);
+                  }
+                } catch { /* best-effort */ }
+              }
+            }
+            // Pass through as text-only (e.g. "[图片]") so user knows a media was received
           }
         }
 

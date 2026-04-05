@@ -12,5 +12,5 @@ if (cmd === "start") {
   process.env.WECHAT_UPGRADE_ONLY = "1";
   import("./launcher.js");
 } else {
-  import("./launcher.js");
+  import("./dashboard.js");
 }

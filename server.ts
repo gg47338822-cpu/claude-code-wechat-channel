@@ -326,6 +326,29 @@ async function main() {
     delete process.env[k];
   }
 
+  // Login-only mode: launcher调用，只做扫码登录然后退出
+  if (process.env.WECHAT_LOGIN_ONLY === "1") {
+    log("扫码登录模式...");
+    const account = await doQRLoginWithWebServer(DEFAULT_BASE_URL, PROFILE_NAME, paths.credentialsFile, log);
+    if (!account) {
+      log("登录失败或超时。");
+      process.exit(1);
+    }
+    log(`登录成功！账号: ${account.accountId}`);
+
+    // 自动加白名单
+    if (account.userId) {
+      const config = loadProfileConfig(paths.profileConfigFile);
+      const allowList = config.allow_from ?? [];
+      if (!allowList.includes(account.userId)) {
+        config.allow_from = [account.userId, ...allowList];
+        fs.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
+        log(`白名单已自动添加扫码用户: ${account.userId}`);
+      }
+    }
+    process.exit(0);
+  }
+
   await mcp.connect(new StdioServerTransport());
 
   // ── Startup summary ──
@@ -347,36 +370,19 @@ async function main() {
   log(summaryParts.join(" | "));
 
   if (!account) {
-    log("未找到凭据，直接启动扫码登录...");
-    const newAccount = await doQRLogin(DEFAULT_BASE_URL, paths.credentialsFile, log);
-    if (!newAccount) {
-      log("登录失败或超时。请重新启动重试。");
-      process.exit(1);
-    }
-    account = newAccount;
-    activeAccount = newAccount;
-
-    // Auto-set allow_from from scanned user's ID
-    if (newAccount.userId) {
-      const config = loadProfileConfig(paths.profileConfigFile);
-      const allowList = config.allow_from ?? [];
-      if (!allowList.includes(newAccount.userId)) {
-        config.allow_from = [newAccount.userId, ...allowList];
-        fs.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
-        log(`白名单已自动添加扫码用户: ${newAccount.userId}`);
-      }
-    }
-
-    // Notify Claude that login succeeded
+    log("未找到凭据。请运行 wechat-channel new <名字> 创建profile并扫码登录。");
+    // 通知Claude未登录
     try {
       await mcp.notification({
         method: "notifications/claude/channel",
         params: {
-          content: `微信登录成功！账号: ${newAccount.accountId}，Profile: ${PROFILE_NAME}。消息监听已启动。`,
+          content: "微信未连接。请退出后运行 wechat-channel new <名字> 完成扫码登录。",
           meta: { sender: "system", sender_id: "system", msg_type: "setup", can_reply: "false" },
         },
       });
-    } catch { /* notification失败不影响主流程 */ }
+    } catch {}
+    // 保持进程活着等待wechat_login工具调用（用户也可以手动/access login）
+    await new Promise(() => {});
   }
 
   log(`使用已保存账号: ${account.accountId}`);
