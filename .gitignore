@@ -2,3 +2,4 @@ node_modules/
 *.tgz
 memory/
 .mcp-resolved*.json
+.npm-recovery-codes
