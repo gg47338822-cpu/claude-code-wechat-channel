@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.30 (2026-04-05)
+
+### New Features
+
+- **Dashboard 重启服务**: 新增重启按钮，完整流程——停止所有实例→逐个启动→Terminal.app弹出独立tab
+- **Dashboard 在线检测修复**: resolveWorkdir 在状态检测时也正确应用，实例在线状态判断更准确
+- **Mailbox 推送记录**: 推送成功后记录到 `~/.claude/mailbox-pushed.jsonl`，方便追溯
+
+### Changes
+
+- **移除 Dashboard 中的 Mailbox/分身状态**: mailbox面板和分身状态相关代码已移除，这些功能将迁移到 nerve-center 统一管理
+- **Mailbox Watcher 仅限 jason profile**: 非 jason profile 不启动 watcher，避免多实例重复推送
+
 ## 1.0.29 (2026-04-05)
 
 ### New Features

@@ -235,7 +235,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       if (!pollingActive) {
         pollingActive = true;
         const config = loadProfileConfig(paths.profileConfigFile);
-        startMailboxWatcher(() => activeAccount, contextTokens, config.allow_from?.[0] ?? null, log);
+        startMailboxWatcher(() => activeAccount, contextTokens, config.allow_from?.[0] ?? null, log, PROFILE_NAME);
         startPolling(account, {
           mcp, profileName: PROFILE_NAME, paths, contextTokens,
           setActiveAccount: (a) => { activeAccount = a; },
@@ -393,7 +393,7 @@ async function main() {
 
   // Start mailbox watcher (forwards分身notifications to Jason's WeChat)
   const mailboxRecipient = profileConfig.allow_from?.[0] ?? null;
-  startMailboxWatcher(() => activeAccount, contextTokens, mailboxRecipient, log);
+  startMailboxWatcher(() => activeAccount, contextTokens, mailboxRecipient, log, PROFILE_NAME);
 
   await startPolling(account, {
     mcp,

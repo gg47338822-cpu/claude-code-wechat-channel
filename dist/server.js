@@ -1128,12 +1128,17 @@ async function startPolling(account, deps) {
 import fs5 from "node:fs";
 import path3 from "node:path";
 var MAILBOX_PATH = path3.join(process.env.HOME || "", ".claude", "mailbox.jsonl");
+var PUSHED_PATH = path3.join(process.env.HOME || "", ".claude", "mailbox-pushed.jsonl");
 var POLL_INTERVAL_MS = 3e3;
 function formatMailboxMsg(entry) {
   const prefix = entry.level === "error" ? "[\u7D27\u6025] " : "";
   return `${prefix}[${entry.from}] ${entry.msg}`;
 }
-function startMailboxWatcher(getAccount, contextTokens2, recipientId, log3) {
+function startMailboxWatcher(getAccount, contextTokens2, recipientId, log3, profileName) {
+  if (profileName && profileName !== "jason") {
+    log3(`mailbox-watcher: \u975Ejason profile\uFF08${profileName}\uFF09\uFF0C\u8DF3\u8FC7`);
+    return;
+  }
   if (!recipientId) {
     log3("mailbox-watcher: \u65E0\u53D1\u9001\u76EE\u6807\uFF08allow_from\u4E3A\u7A7A\uFF09\uFF0C\u8DF3\u8FC7");
     return;
@@ -1177,7 +1182,13 @@ function startMailboxWatcher(getAccount, contextTokens2, recipientId, log3) {
             continue;
           }
           const text = formatMailboxMsg(entry);
-          sendTextMessage(account.baseUrl, account.token, recipientId, text, ct).then(() => log3(`mailbox-watcher: \u5DF2\u63A8\u9001 [${entry.from}] ${entry.task_id || ""}`)).catch((err) => log3(`mailbox-watcher: \u63A8\u9001\u5931\u8D25: ${String(err)}`));
+          sendTextMessage(account.baseUrl, account.token, recipientId, text, ct).then(() => {
+            log3(`mailbox-watcher: \u5DF2\u63A8\u9001 [${entry.from}] ${entry.task_id || ""}`);
+            try {
+              fs5.appendFileSync(PUSHED_PATH, JSON.stringify({ ...entry, pushed_at: (/* @__PURE__ */ new Date()).toISOString() }) + "\n");
+            } catch {
+            }
+          }).catch((err) => log3(`mailbox-watcher: \u63A8\u9001\u5931\u8D25: ${String(err)}`));
         } catch {
         }
       }
@@ -1389,7 +1400,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       if (!pollingActive) {
         pollingActive = true;
         const config = loadProfileConfig(paths.profileConfigFile);
-        startMailboxWatcher(() => activeAccount, contextTokens, config.allow_from?.[0] ?? null, log2);
+        startMailboxWatcher(() => activeAccount, contextTokens, config.allow_from?.[0] ?? null, log2, PROFILE_NAME);
         startPolling(account, {
           mcp,
           profileName: PROFILE_NAME,
@@ -1548,7 +1559,7 @@ async function main() {
   log2(`\u4F7F\u7528\u5DF2\u4FDD\u5B58\u8D26\u53F7: ${account.accountId}`);
   activeAccount = account;
   const mailboxRecipient = profileConfig.allow_from?.[0] ?? null;
-  startMailboxWatcher(() => activeAccount, contextTokens, mailboxRecipient, log2);
+  startMailboxWatcher(() => activeAccount, contextTokens, mailboxRecipient, log2, PROFILE_NAME);
   await startPolling(account, {
     mcp,
     profileName: PROFILE_NAME,

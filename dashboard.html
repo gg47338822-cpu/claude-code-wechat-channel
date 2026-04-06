@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="WeChat Channel Instance Dashboard - manage WeChat bot instances">
+<title>WeChat Channel</title>
+<style>
+/* ── Kuma-inspired Tokens ────────────────────────────────────── */
+:root {
+  --bg: #090c10; --bg-card: #0d1117; --bg-header: #161b22; --bg-input: #070a10;
+  --border: #1d2634; --border-focus: #5cdd8b;
+  --text: #b1b8c0; --text-bright: #f0f6fc; --text-muted: #8b949e; --text-dark: #020b05;
+  --primary: #5cdd8b; --primary-hover: #7ce8a4;
+  --danger: #dc3545; --warning: #f8a306; --maintenance: #1747f5;
+  --green: #5cdd8b; --red: #dc3545; --orange: #f8a306; --blue: #1747f5; --gray: #848484;
+  --radius: 10px; --radius-pill: 50rem;
+  --shadow: 0 15px 70px rgb(0 0 0); --easing: cubic-bezier(0.54,0.78,0.55,0.97);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;font-size:14px}
+::-webkit-scrollbar{width:10px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:20px}::-webkit-scrollbar-track{background:transparent}
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:340px;min-width:340px;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--bg-card)}
+.main{flex:1;overflow-y:auto;background:var(--bg)}
+.sidebar-head{padding:16px 16px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--bg-header)}
+.sidebar-head h1{font-size:15px;font-weight:600;color:var(--text-bright);display:flex;align-items:center;gap:8px}
+.sidebar-head h1 svg{color:var(--primary)}
+.sidebar-list{flex:1;overflow-y:auto;padding:8px}
+.item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius);cursor:pointer;transition:all ease-in-out .15s;margin-bottom:2px}
+.item:hover{background:var(--bg-input)}
+.item.active{background:var(--bg-input);border-left:3px solid var(--primary);padding-left:11px}
+.item-status{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.item-status.s-active{background:var(--green);box-shadow:0 0 6px var(--green)}
+.item-status.s-online{background:var(--green);opacity:.5}
+.item-status.s-paused{background:var(--blue)}
+.item-status.s-stale{background:var(--orange)}
+.item-status.s-offline{background:var(--red)}
+.item-status.s-unconfigured{background:var(--gray)}
+.item-info{flex:1;min-width:0}
+.item-name{font-size:14px;font-weight:500;color:var(--text-bright);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-sub{font-size:12px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-beats{display:flex;gap:2px;align-items:flex-end;flex-shrink:0}
+.beat{width:4px;border-radius:2px;background:var(--gray);opacity:.3}
+.beat.up{background:var(--green);opacity:1}.beat.down{background:var(--red);opacity:1}.beat.warn{background:var(--orange);opacity:1}.beat.pause{background:var(--blue);opacity:.6}
+.badge{display:inline-flex;align-items:center;padding:3px 12px;border-radius:var(--radius-pill);font-size:12px;font-weight:600;min-width:56px;justify-content:center}
+.badge-active{background:var(--green);color:var(--text-dark)}.badge-online{background:var(--green);color:var(--text-dark);opacity:.7}
+.badge-paused{background:var(--blue);color:#fff}.badge-stale{background:var(--orange);color:var(--text-dark)}
+.badge-offline{background:var(--red);color:#fff}.badge-unconfigured{background:var(--gray);color:#fff}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 20px;border-radius:25px;border:none;cursor:pointer;font-size:13px;font-weight:500;font-family:var(--font);transition:all .15s ease}
+.btn-primary{background:var(--primary);color:var(--text-dark)}.btn-primary:hover{background:var(--primary-hover)}
+.btn-normal{background:var(--bg-header);color:var(--text);border:1px solid var(--border)}.btn-normal:hover{background:var(--bg-input);color:var(--text-bright)}
+.btn-danger{background:transparent;color:var(--red);border:1px solid var(--red)}.btn-danger:hover{background:rgba(220,53,69,.15)}
+.btn-sm{padding:6px 14px;font-size:12px;min-height:32px}
+.btn-icon{padding:6px;border-radius:8px;background:none;color:var(--text-muted);border:none;cursor:pointer;font-size:16px}.btn-icon:hover{color:var(--text-bright);background:var(--bg-input)}
+.btn-group{display:flex;gap:8px;flex-wrap:wrap}
+.shadow-box{background:var(--bg-card);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:16px}
+.detail{padding:24px 28px;animation:fadein .2s var(--easing)}
+@keyframes fadein{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.detail-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}
+.detail-title{font-size:26px;font-weight:700;color:var(--text-bright)}
+.detail-id{font-size:.7em;color:var(--text-muted);font-weight:400}
+.detail-section{margin-top:24px}
+.detail-section h3{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px}
+.info-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 20px;font-size:13px}
+.info-grid .k{color:var(--text-muted)}.info-grid .v{color:var(--text);text-align:right;font-family:var(--mono);font-size:12px}
+.field{margin-bottom:12px}.field-label{display:block;font-size:12px;color:var(--text-muted);margin-bottom:5px}
+.field-input,.field-textarea{width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-input);color:var(--text);font-size:13px;font-family:var(--font);transition:border-color .15s}
+.field-input:focus,.field-textarea:focus{outline:none;border-color:var(--border-focus)}
+.field-textarea{resize:none;min-height:56px;border-radius:12px;line-height:1.5}
+.mem-item{border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden}
+.mem-item summary{padding:8px 12px;font-size:12px;color:var(--text);cursor:pointer;list-style:none;display:flex;justify-content:space-between}
+.mem-item summary:hover{background:var(--bg-header)}
+.mem-item pre{margin:0;padding:10px 12px;background:var(--bg-input);font-size:11px;line-height:1.5;color:var(--text-muted);white-space:pre-wrap;max-height:120px;overflow-y:auto;font-family:var(--mono);border-top:1px solid var(--border)}
+.cmd{background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:11px;color:var(--text);word-break:break-all;position:relative;line-height:1.5}
+.cmd .copy{position:absolute;top:6px;right:6px}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);gap:8px;padding:40px}
+.empty svg{opacity:.3}
+.qr-wrap{text-align:center;padding:20px 0}.qr-wrap img{width:200px;height:200px;border-radius:var(--radius);border:1px solid var(--border)}
+.qr-msg{text-align:center;font-size:13px;color:var(--text);margin-top:10px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:100}
+.overlay.open{display:flex}
+.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;width:420px;max-width:90vw;box-shadow:var(--shadow);animation:slideUp .2s var(--easing)}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.modal-head h2{font-size:16px;font-weight:600;color:var(--text-bright)}
+.modal-body{padding:20px}
+.modal-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--bg-card);color:var(--text-bright);border:1px solid var(--border);padding:10px 20px;border-radius:var(--radius);font-size:13px;opacity:0;transition:all .25s var(--easing);pointer-events:none;z-index:200;box-shadow:var(--shadow)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.save-hint{font-size:12px;color:var(--primary);margin-left:8px;opacity:0;transition:opacity .2s}.save-hint.show{opacity:1}
+
+/* ── Wizard ──────────────────────────────────────────────────── */
+.wizard{position:fixed;inset:0;background:var(--bg);z-index:300;display:flex;align-items:center;justify-content:center;overflow-y:auto}
+.wizard-card{background:var(--bg-card);border:1px solid var(--border);border-radius:20px;width:520px;max-width:92vw;box-shadow:var(--shadow);animation:slideUp .3s var(--easing)}
+.wizard-header{padding:28px 32px 0;text-align:center}
+.wizard-header h1{font-size:22px;font-weight:700;color:var(--text-bright);margin-bottom:4px}
+.wizard-header p{font-size:13px;color:var(--text-muted)}
+.wizard-steps{display:flex;justify-content:center;gap:8px;padding:20px 32px 0}
+.wizard-step{width:60px;height:4px;border-radius:2px;background:var(--border);transition:background .3s}
+.wizard-step.done{background:var(--primary)}
+.wizard-step.current{background:var(--primary);opacity:.6}
+.wizard-body{padding:24px 32px 28px}
+.wizard-footer{padding:0 32px 28px;display:flex;justify-content:flex-end;gap:8px}
+.check-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.check-row:last-child{border-bottom:none}
+.check-icon{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.check-icon.ok{background:var(--green);color:var(--text-dark)}
+.check-icon.fail{background:var(--red);color:#fff}
+.check-icon.loading{background:var(--border);color:var(--text-muted);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.check-info{flex:1}
+.check-name{font-size:14px;color:var(--text-bright);font-weight:500}
+.check-detail{font-size:12px;color:var(--text-muted);margin-top:2px}
+.wizard .qr-wrap img{width:220px;height:220px;border-radius:12px;border:2px solid var(--border)}
+.wizard .qr-msg{margin-top:12px;font-size:14px}
+.wizard-qr-pulse{animation:qrpulse 2s ease-in-out infinite}
+@keyframes qrpulse{0%,100%{box-shadow:0 0 0 0 rgba(92,221,139,.3)}50%{box-shadow:0 0 0 12px rgba(92,221,139,0)}}
+.template-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.template-card{padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:all .15s}
+.template-card:hover{border-color:var(--primary);background:rgba(92,221,139,.05)}
+.template-card.selected{border-color:var(--primary);background:rgba(92,221,139,.1)}
+.template-card .tc-title{font-size:13px;font-weight:600;color:var(--text-bright);margin-bottom:2px}
+.template-card .tc-desc{font-size:11px;color:var(--text-muted)}
+.success-icon{width:64px;height:64px;border-radius:50%;background:var(--primary);color:var(--text-dark);display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px}
+.autostart-row{display:flex;align-items:center;gap:10px;padding:12px 16px;border:1px solid var(--border);border-radius:var(--radius);margin-top:16px;cursor:pointer;transition:border-color .15s}
+.autostart-row:hover{border-color:var(--primary)}
+.autostart-row input{accent-color:var(--primary)}
+
+/* ── Mobile ──────────────────────────────────────────────────── */
+@media(max-width:768px){
+  .app{flex-direction:column;height:auto;min-height:100vh}
+  .sidebar{width:100%;min-width:100%;border-right:none;border-bottom:1px solid var(--border);max-height:none}
+  .sidebar.collapsed .sidebar-list{display:none}
+  .sidebar-head{position:sticky;top:0;z-index:10}
+  .sidebar-list{max-height:50vh;overflow-y:auto}
+  .sidebar-toggle{display:inline-flex !important}
+  .main{flex:1;min-height:50vh}
+  .main .empty{min-height:40vh;height:auto}
+  .detail{padding:16px}
+  .detail-head{flex-direction:column;gap:12px}
+  .detail-title{font-size:20px}
+  .shadow-box{padding:14px}
+  .info-grid{font-size:12px}
+  .modal{width:95vw;max-width:95vw}
+  .btn{min-height:36px}
+}
+@media(min-width:769px){
+  .sidebar-toggle{display:none !important}
+}
+</style>
+</head>
+<body>
+
+<!-- ── Setup Wizard ──────────────────────────────────────────── -->
+<div class="wizard" id="wizard" style="display:none">
+<div class="wizard-card">
+  <div class="wizard-header">
+    <h1>WeChat Channel</h1>
+    <p>让微信连接 Claude Code，3 分钟完成配置</p>
+  </div>
+  <div class="wizard-steps">
+    <div class="wizard-step" id="ws1"></div>
+    <div class="wizard-step" id="ws2"></div>
+    <div class="wizard-step" id="ws3"></div>
+    <div class="wizard-step" id="ws4"></div>
+  </div>
+
+  <!-- Step 1: Environment Check -->
+  <div class="wizard-body" id="wiz1">
+    <div id="wizChecks"></div>
+    <div id="wizCheckMsg" style="text-align:center;margin-top:16px;font-size:13px;color:var(--text-muted)">正在检查环境...</div>
+  </div>
+
+  <!-- Step 2: QR Scan -->
+  <div class="wizard-body" id="wiz2" style="display:none">
+    <div class="qr-wrap"><img id="wizQR" class="wizard-qr-pulse"/></div>
+    <div class="qr-msg" id="wizQRMsg">正在获取二维码...</div>
+  </div>
+
+  <!-- Step 3: Configure -->
+  <div class="wizard-body" id="wiz3" style="display:none">
+    <div style="margin-bottom:16px">
+      <div class="field-label" style="margin-bottom:8px;font-size:13px;color:var(--text-bright)">给助手起个名字</div>
+      <input class="field-input" id="wizName" placeholder="my-assistant" autocomplete="off"/>
+    </div>
+    <div class="field-label" style="margin-bottom:8px;font-size:13px;color:var(--text-bright)">选一个助手类型</div>
+    <div class="template-grid">
+      <div class="template-card selected" data-tpl="general" onclick="selectTemplate(this)">
+        <div class="tc-title">通用助手</div>
+        <div class="tc-desc">什么都能做，推荐新手选这个</div>
+      </div>
+      <div class="template-card" data-tpl="work" onclick="selectTemplate(this)">
+        <div class="tc-title">工作助手</div>
+        <div class="tc-desc">专注工作任务，严谨高效</div>
+      </div>
+      <div class="template-card" data-tpl="study" onclick="selectTemplate(this)">
+        <div class="tc-title">学习助手</div>
+        <div class="tc-desc">解答问题，辅导学习</div>
+      </div>
+      <div class="template-card" data-tpl="custom" onclick="selectTemplate(this)">
+        <div class="tc-title">自定义</div>
+        <div class="tc-desc">自己写身份描述</div>
+      </div>
+    </div>
+    <div id="wizCustomIdentity" style="display:none">
+      <div class="field">
+        <label class="field-label">自定义身份描述</label>
+        <textarea class="field-textarea" id="wizIdentity" rows="2" placeholder="你是一个..."></textarea>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">工作目录（助手可以读写这个目录下的文件）</label>
+      <input class="field-input" id="wizWorkdir" placeholder="~/Documents/my-assistant"/>
+    </div>
+  </div>
+
+  <!-- Step 4: Done -->
+  <div class="wizard-body" id="wiz4" style="display:none">
+    <div class="success-icon">&#10003;</div>
+    <div style="text-align:center;font-size:18px;font-weight:600;color:var(--text-bright);margin-bottom:6px">创建成功！</div>
+    <div style="text-align:center;font-size:13px;color:var(--primary);margin-bottom:20px" id="wizLaunchStatus">正在启动助手...</div>
+
+    <div class="shadow-box" style="padding:14px">
+      <div style="font-size:12px;color:var(--text-muted);line-height:1.8">
+        <div>1. 助手进程需要保持运行才能收微信消息</div>
+        <div>2. 关掉终端后助手会停止，勾选下方「开机自启」可以解决</div>
+        <div>3. 可以在管理面板随时启动、停止、重新扫码</div>
+      </div>
+    </div>
+
+    <label class="autostart-row" id="wizAutostart">
+      <input type="checkbox" id="wizAutostartCheck" checked/>
+      <div>
+        <div style="font-size:13px;color:var(--text-bright)">开机自动启动（推荐）</div>
+        <div style="font-size:11px;color:var(--text-muted)">电脑开机后自动连接微信，无需手动操作</div>
+      </div>
+    </label>
+  </div>
+
+  <div class="wizard-footer" id="wizFooter">
+    <button class="btn btn-primary" id="wizNextBtn" onclick="wizNext()" disabled>检查中...</button>
+  </div>
+</div>
+</div>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="sidebar-head">
+      <h1><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>WeChat Channel</h1>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-primary btn-sm" onclick="showNew()">+ 新建</button>
+        <button class="btn-icon" onclick="showRestart()" title="重启服务"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+        <button class="btn-icon sidebar-toggle" onclick="toggleSidebar()" style="display:none">&#9776;</button>
+      </div>
+    </div>
+    <div class="sidebar-list" id="list"></div>
+  </div>
+  <div class="main" id="main">
+    <div class="empty" id="emptyState">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <div style="font-size:15px;color:var(--text);margin-top:4px">选择左侧实例查看详情</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">点击实例名称查看配置、状态和记忆</div>
+      <button class="btn btn-sm btn-primary" style="margin-top:12px" onclick="showNew()">+ 新建实例</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="overlay" id="newModal"><div class="modal">
+  <div id="s1"><div class="modal-head"><h2>新建实例</h2><button class="btn-icon" onclick="closeNew()">&times;</button></div>
+  <div class="modal-body"><div class="field"><label class="field-label">实例名称 (英文小写)</label><input class="field-input" id="iName" placeholder="zhangsan" autocomplete="off"/></div><div class="field"><label class="field-label">文件夹名称 (~/Documents/ 下)</label><input class="field-input" id="iFolder" placeholder="张三"/></div></div>
+  <div class="modal-foot"><button class="btn btn-normal" onclick="closeNew()">取消</button><button class="btn btn-primary" onclick="doCreate()">下一步</button></div></div>
+  <div id="s2" style="display:none"><div class="modal-head"><h2>扫码登录</h2></div><div class="modal-body"><div class="qr-wrap"><img id="nQR"/></div><div class="qr-msg" id="nSt">请让对方用微信扫描二维码</div></div></div>
+  <div id="s3" style="display:none"><div class="modal-head"><h2>创建成功</h2></div><div class="modal-body"><p style="font-size:13px;color:var(--primary)">实例已创建，可以在面板中启动</p></div><div class="modal-foot"><button class="btn btn-primary" onclick="closeNew();load()">完成</button></div></div>
+</div></div>
+
+<div class="overlay" id="rsModal"><div class="modal">
+  <div class="modal-head"><h2>重新扫码 — <span id="rsName"></span></h2><button class="btn-icon" onclick="closeRs()">&times;</button></div>
+  <div class="modal-body"><div class="qr-wrap"><img id="rsQR"/></div><div class="qr-msg" id="rsSt">获取二维码...</div></div>
+</div></div>
+
+<!-- ── Restart Service Modal ──────────────────────────────────── -->
+<div class="overlay" id="restartModal"><div class="modal" style="width:480px">
+  <div class="modal-head"><h2>重启服务</h2><button class="btn-icon" onclick="closeRestart()">&times;</button></div>
+  <div class="modal-body" id="restartBody">
+    <div id="restartStep0">
+      <div style="font-size:13px;color:var(--text);line-height:1.8;margin-bottom:16px">
+        将停止所有运行中的实例进程，然后你可以逐个重新启动。
+      </div>
+      <div id="restartInstances"></div>
+      <div style="margin-top:16px;text-align:right">
+        <button class="btn btn-normal" onclick="closeRestart()">取消</button>
+        <button class="btn btn-danger" id="restartGoBtn" onclick="doRestart()" style="margin-left:8px">停止所有实例</button>
+      </div>
+    </div>
+    <div id="restartStep1" style="display:none">
+      <div id="restartLog"></div>
+    </div>
+    <div id="restartStep2" style="display:none">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:600;color:var(--text-bright)">服务已就绪</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">点击「启动」开启实例，然后在终端确认权限</div>
+      </div>
+      <div id="restartLaunchList"></div>
+      <div style="margin-top:16px;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-input)">
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
+          <span style="color:var(--primary)">提示：</span>启动后在终端运行 <code style="background:var(--bg-header);padding:2px 6px;border-radius:4px;font-size:11px">tmux attach -t wechat-v2</code> 切换标签页按回车确认权限
+        </div>
+      </div>
+      <div style="margin-top:16px;text-align:right">
+        <button class="btn btn-primary" onclick="closeRestart();load()">完成</button>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<script>
+let T=null,curName='',curData=null,allInstances=[];
+var HOME_DIR='/Users/unknown';
+const SM={active:'活跃',online:'在线',paused:'已暂停',stale:'异常',offline:'离线',unconfigured:'未配置'};
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2500)}
+function cp(s){navigator.clipboard.writeText(s).then(function(){toast('已复制')})}
+function age(ms){if(ms==null)return'-';if(ms<60000)return Math.round(ms/1000)+'s';if(ms<3600000)return Math.round(ms/60000)+'m';if(ms<86400000)return Math.round(ms/3600000)+'h';return Math.round(ms/86400000)+'d'}
+function esc(s){var d=document.createElement('div');d.textContent=String(s);return d.innerHTML}
+function toggleSidebar(){document.querySelector('.sidebar').classList.toggle('collapsed')}
+
+function showRestart(){
+  document.getElementById('restartModal').classList.add('open');
+  document.getElementById('restartStep0').style.display='';
+  document.getElementById('restartStep1').style.display='none';
+  document.getElementById('restartStep2').style.display='none';
+  var container=document.getElementById('restartInstances');
+  container.textContent='';
+  allInstances.forEach(function(i){
+    var row=document.createElement('div');row.className='check-row';
+    var dot=document.createElement('span');dot.className='item-status s-'+i.status;dot.style.cssText='display:inline-block;margin-right:8px';
+    var info=document.createElement('div');info.className='check-info';
+    var name=document.createElement('div');name.className='check-name';name.textContent=i.name;
+    var detail=document.createElement('div');detail.className='check-detail';detail.textContent=(i.pid?'PID '+i.pid+' · ':'')+(i.status==='offline'?'未运行':i.status);
+    info.append(name,detail);row.append(dot,info);container.append(row);
+  });
+}
+function closeRestart(){document.getElementById('restartModal').classList.remove('open')}
+
+function addRestartLog(text,type){
+  var log=document.getElementById('restartLog');
+  var row=document.createElement('div');row.className='check-row';
+  var icon=document.createElement('div');icon.className='check-icon '+(type==='ok'?'ok':type==='fail'?'fail':'loading');
+  icon.textContent=type==='ok'?'\u2713':type==='fail'?'\u2717':'\u2026';
+  var info=document.createElement('div');info.className='check-info';
+  var nm=document.createElement('div');nm.className='check-name';nm.textContent=text;
+  info.append(nm);row.append(icon,info);log.append(row);
+}
+
+function updateLastLog(text,type){
+  var log=document.getElementById('restartLog');
+  var rows=log.querySelectorAll('.check-row');
+  if(rows.length===0)return;
+  var last=rows[rows.length-1];
+  var iconEl=last.querySelector('.check-icon');
+  var nameEl=last.querySelector('.check-name');
+  iconEl.className='check-icon '+(type==='ok'?'ok':'fail');
+  iconEl.textContent=type==='ok'?'\u2713':'\u2717';
+  if(text)nameEl.textContent=text;
+}
+
+async function doRestart(){
+  document.getElementById('restartStep0').style.display='none';
+  document.getElementById('restartStep1').style.display='';
+  document.getElementById('restartLog').textContent='';
+
+  addRestartLog('停止所有实例进程\u2026','loading');
+  try{
+    var r=await(await fetch('/api/restart-service',{method:'POST'})).json();
+    if(r.ok){updateLastLog('所有实例已停止','ok')}
+    else{updateLastLog('停止失败: '+(r.error||'未知错误'),'fail');return}
+  }catch(e){updateLastLog('请求失败: '+e,'fail');return}
+
+  addRestartLog('等待进程退出\u2026','loading');
+  await new Promise(function(r){setTimeout(r,2000)});
+  updateLastLog('进程已清理','ok');
+
+  addRestartLog('检查实例状态\u2026','loading');
+  try{
+    var raw=await(await fetch('/api/instances')).json();
+    var running=raw.filter(function(i){return i.pid&&i.name!=='default'});
+    if(running.length===0){updateLastLog('全部已停止，可以重新启动','ok')}
+    else{updateLastLog(running.length+'\u4e2a实例仍在运行','fail')}
+  }catch(e){updateLastLog('检查失败','fail')}
+
+  await new Promise(function(r){setTimeout(r,800)});
+  document.getElementById('restartStep1').style.display='none';
+  document.getElementById('restartStep2').style.display='';
+
+  try{
+    var fresh=await(await fetch('/api/instances')).json();
+    var list=document.getElementById('restartLaunchList');
+    list.textContent='';
+    fresh.filter(function(i){return i.name!=='default'&&i.hasAccount}).forEach(function(i){
+      var row=document.createElement('div');row.className='check-row';row.id='rl-'+i.name;
+      var info=document.createElement('div');info.className='check-info';info.style.cssText='display:flex;align-items:center;justify-content:space-between;width:100%';
+      var left=document.createElement('div');
+      var nm=document.createElement('div');nm.className='check-name';nm.textContent=i.name;
+      left.append(nm);
+      var right=document.createElement('div');right.style.cssText='display:flex;align-items:center;gap:8px';
+      var badge=document.createElement('span');badge.className='badge badge-offline';badge.style.fontSize='11px';badge.textContent='已停止';
+      if(i.pid){badge.className='badge badge-active';badge.textContent='运行中'}
+      right.append(badge);
+      if(!i.pid){
+        var btn=document.createElement('button');btn.className='btn btn-primary btn-sm';btn.textContent='启动';
+        btn.setAttribute('data-name',i.name);
+        btn.addEventListener('click',function(){launchFromRestart(i.name,btn)});
+        right.append(btn);
+      }
+      info.append(left,right);row.append(info);list.append(row);
+    });
+  }catch(e){}
+}
+
+async function launchFromRestart(name,btn){
+  btn.disabled=true;btn.textContent='启动中\u2026';
+  try{
+    var r=await(await fetch('/api/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name})})).json();
+    if(r.ok){
+      btn.textContent='已启动';btn.className='btn btn-sm btn-normal';btn.disabled=true;
+      var row=document.getElementById('rl-'+name);
+      if(row){var badge=row.querySelector('.badge');if(badge){badge.className='badge badge-online';badge.style.fontSize='11px';badge.textContent='等待确认'}}
+    }else{
+      btn.disabled=false;btn.textContent='启动';toast(r.error||'启动失败');
+    }
+  }catch(e){btn.disabled=false;btn.textContent='启动';toast('启动失败: '+e)}
+}
+
+async function load(){
+  try{
+    var raw=await(await fetch('/api/instances')).json();
+    allInstances=raw.filter(function(i){return i.name!=='default'});
+    renderList();
+  }catch(e){console.error(e)}
+}
+
+function renderList(){
+  var el=document.getElementById('list');el.textContent='';
+  if(!allInstances.length){var e=document.createElement('div');e.className='empty';e.style.height='auto';e.style.padding='40px 16px';e.textContent='暂无实例';el.append(e);return}
+  allInstances.forEach(function(i){
+    var item=document.createElement('div');item.className='item'+(curName===i.name?' active':'');
+    item.setAttribute('tabindex','0');item.setAttribute('role','button');
+    item.addEventListener('click',function(){openDetail(i.name)});
+    item.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();openDetail(i.name)}});
+    var dot=document.createElement('div');dot.className='item-status s-'+i.status;
+    var info=document.createElement('div');info.className='item-info';
+    var nm=document.createElement('div');nm.className='item-name';nm.textContent=i.name;
+    var sub=document.createElement('div');sub.className='item-sub';sub.textContent=(i.workdir||'').replace(new RegExp('^'+HOME_DIR+'/'),'~/')+' | '+age(i.syncBufAge);
+    info.append(nm,sub);
+    var beats=document.createElement('div');beats.className='item-beats';
+    var cls=i.status==='active'||i.status==='online'?'up':i.status==='paused'?'pause':i.status==='stale'?'warn':'';
+    var total=8,filled=i.status==='offline'||i.status==='unconfigured'?0:i.status==='stale'?3:7;
+    for(var j=0;j<total;j++){var b=document.createElement('div');b.className='beat'+(j<filled?' '+cls:'');b.style.height=(14+(j%3)*3)+'px';beats.append(b)}
+    item.append(dot,info,beats);el.append(item);
+  });
+}
+
+async function openDetail(name){
+  curName=name;renderList();
+  // F6: loading state
+  var m=document.getElementById('main');m.textContent='';
+  var loader=document.createElement('div');loader.className='empty';loader.style.height='auto';loader.style.padding='60px';loader.textContent='加载中...';m.append(loader);
+  // Mobile: collapse sidebar after selection
+  if(window.innerWidth<=768)document.querySelector('.sidebar').classList.add('collapsed');
+  var d=await(await fetch('/api/detail/'+name)).json();if(d.error){toast(d.error);return}
+  curData=d;
+  var m=document.getElementById('main');m.textContent='';
+  var detail=document.createElement('div');detail.className='detail';
+
+  // ── Head: name + status + launch button on one row ──
+  var head=document.createElement('div');head.className='detail-head';
+  head.style.cssText='display:flex;align-items:center;gap:16px;padding:16px 20px;background:var(--bg-card);border-radius:var(--radius);margin-bottom:12px;box-shadow:var(--shadow);flex-wrap:wrap';
+
+  // Left: name + id
+  var headLeft=document.createElement('div');headLeft.style.cssText='flex:1;min-width:0';
+  var title=document.createElement('div');title.style.cssText='font-size:20px;font-weight:700;color:var(--text-bright)';
+  title.textContent=d.name+' ';
+  var idSpan=document.createElement('span');idSpan.style.cssText='font-size:13px;color:var(--text-muted);font-weight:400';idSpan.textContent='#'+(d.accountId?d.accountId.split('@')[0]:'--');
+  title.append(idSpan);
+  // Status text under name
+  var statusLine=document.createElement('div');statusLine.style.cssText='font-size:13px;margin-top:4px';
+  if(!d.hasAccount){statusLine.textContent='未登录';statusLine.style.color='var(--warning)'}
+  else if(d.pid){statusLine.textContent='运行中 · PID '+d.pid;statusLine.style.color='var(--primary)'}
+  else{statusLine.textContent='已停止';statusLine.style.color='var(--text-muted)'}
+  headLeft.append(title,statusLine);
+
+  // Right: action buttons in a row
+  var headRight=document.createElement('div');headRight.style.cssText='display:flex;gap:8px;align-items:center;flex-shrink:0';
+
+  // Buttons based on state: 未登录→扫码登录|删除  已停止→启动|删除  运行中→停止
+  if(!d.hasAccount){
+    var loginBtn=document.createElement('button');loginBtn.className='btn btn-primary';
+    loginBtn.style.cssText='padding:8px 20px;font-size:13px;font-weight:600';
+    loginBtn.textContent='扫码登录';
+    loginBtn.addEventListener('click',function(){rescan(d.name)});
+    var delBtn2=document.createElement('button');delBtn2.className='btn btn-sm btn-normal';
+    delBtn2.style.cssText='border:1px solid var(--border-focus);color:var(--text-bright)';
+    delBtn2.textContent='删除';delBtn2.addEventListener('click',deleteInstance);
+    headRight.append(loginBtn,delBtn2);
+  } else if(d.pid){
+    var stopBtn=document.createElement('button');stopBtn.className='btn btn-sm btn-normal';
+    stopBtn.style.cssText='padding:8px 20px;font-size:13px;font-weight:600;border:1px solid var(--border-focus);color:var(--text-bright)';
+    stopBtn.textContent='停止';
+    stopBtn.addEventListener('click',async function(){
+      stopBtn.disabled=true;stopBtn.textContent='停止中...';
+      try{
+        var r=await(await fetch('/api/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:d.name,action:'stop'})})).json();
+        toast('已停止');setTimeout(function(){load();showDetail(d.name)},1000);
+      }catch(e){toast('停止失败: '+e)}
+    });
+    headRight.append(stopBtn);
+  } else {
+    var launchBtn=document.createElement('button');launchBtn.className='btn btn-primary';
+    launchBtn.style.cssText='padding:8px 20px;font-size:13px;font-weight:600';
+    launchBtn.textContent='启动';
+    launchBtn.addEventListener('click',async function(){
+      launchBtn.disabled=true;launchBtn.textContent='启动中...';
+      try{
+        var r=await(await fetch('/api/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:d.name})})).json();
+        if(r.ok){toast('已在 tmux wechat-v2 中启动，请 attach 后按回车确认');setTimeout(function(){load();showDetail(d.name)},3000)}
+        else{toast(r.error||'启动失败')}
+      }catch(e){toast('启动失败: '+e)}
+      launchBtn.disabled=false;launchBtn.textContent='启动';
+    });
+    var delBtn3=document.createElement('button');delBtn3.className='btn btn-sm btn-normal';
+    delBtn3.style.cssText='border:1px solid var(--border-focus);color:var(--text-bright)';
+    delBtn3.textContent='删除';delBtn3.addEventListener('click',deleteInstance);
+    headRight.append(launchBtn,delBtn3);
+  }
+  head.append(headLeft,headRight);
+
+  // ── Thin status bar (badge + sync/activity) ──
+  var thinBar=document.createElement('div');thinBar.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:0 2px';
+  var badge=document.createElement('span');badge.className='badge badge-'+d.status;badge.textContent=SM[d.status]||d.status;
+  var barText=document.createElement('span');barText.style.cssText='font-size:12px;color:var(--text-muted)';
+  barText.textContent='同步 '+age(d.syncBufAge)+' | 活跃 '+age(d.lastActivityAge);
+  thinBar.append(badge,barText);
+
+  // ── Not logged in banner ──
+  var loginBanner=null;
+  if(!d.hasAccount){
+    loginBanner=document.createElement('div');
+    loginBanner.style.cssText='background:rgba(248,163,6,.1);border:1px solid var(--warning);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px';
+    var bannerText=document.createElement('div');bannerText.style.cssText='font-size:13px;color:var(--warning)';
+    bannerText.textContent='尚未登录微信，点击「重新扫码」完成绑定后即可启动';
+    var bannerBtn=document.createElement('button');bannerBtn.className='btn btn-sm btn-normal';bannerBtn.textContent='重新扫码';
+    bannerBtn.addEventListener('click',function(){rescan(d.name)});
+    loginBanner.append(bannerText,bannerBtn);
+  }
+
+  // ── Config section (collapsible) ──
+  var configSec=document.createElement('div');configSec.className='detail-section';
+  var configDetails=document.createElement('details');
+  var configSummary=document.createElement('summary');configSummary.style.cssText='cursor:pointer;font-size:14px;font-weight:600;color:var(--text-bright);padding:8px 0;list-style:none;display:flex;align-items:center;gap:6px';
+  var configArrow=document.createElement('span');configArrow.style.cssText='font-size:10px;transition:transform .2s;display:inline-block';configArrow.textContent='\u25B6';
+  configSummary.append(configArrow,document.createTextNode(' 配置'));
+  configDetails.addEventListener('toggle',function(){configArrow.style.transform=configDetails.open?'rotate(90deg)':''});
+  var configBox=document.createElement('div');configBox.className='shadow-box';
+
+  function makeField(label,id,type,val,placeholder){
+    var f=document.createElement('div');f.className='field';
+    var l=document.createElement('label');l.className='field-label';l.textContent=label;
+    var inp;
+    if(type==='textarea'){inp=document.createElement('textarea');inp.className='field-textarea';inp.rows=2}
+    else{inp=document.createElement('input');inp.className='field-input'}
+    inp.id=id;inp.value=val||'';if(placeholder)inp.placeholder=placeholder;
+    f.append(l,inp);return f;
+  }
+  configBox.append(
+    makeField('身份 / System Prompt','dtIdentity','textarea',d.identity),
+    makeField('行为规则','dtRules','textarea',d.rules,'例: 只处理法律相关工作'),
+    makeField('白名单 (逗号分隔)','dtAllowFrom','input',(d.allowFrom||[]).join(', '))
+  );
+  var saveRow=document.createElement('div');saveRow.style.cssText='display:flex;align-items:center;margin-top:4px';
+  var saveBtn=document.createElement('button');saveBtn.className='btn btn-sm btn-primary';saveBtn.textContent='保存';saveBtn.addEventListener('click',saveConfig);
+  var saveHint=document.createElement('span');saveHint.className='save-hint';saveHint.id='dtSaveHint';saveHint.textContent='已保存，下条消息生效';
+  saveRow.append(saveBtn,saveHint);configBox.append(saveRow);
+  configDetails.append(configSummary,configBox);configSec.append(configDetails);
+
+  // ── Memory section (collapsible) ──
+  var memSec=document.createElement('div');memSec.className='detail-section';
+  var memDetails=document.createElement('details');
+  var memSummary=document.createElement('summary');memSummary.style.cssText='cursor:pointer;font-size:14px;font-weight:600;color:var(--text-bright);padding:8px 0;list-style:none;display:flex;align-items:center;gap:6px';
+  var memArrow=document.createElement('span');memArrow.style.cssText='font-size:10px;transition:transform .2s;display:inline-block';memArrow.textContent='\u25B6';
+  memSummary.append(memArrow,document.createTextNode(' 记忆'));
+  memDetails.addEventListener('toggle',function(){memArrow.style.transform=memDetails.open?'rotate(90deg)':''});
+  var memBox=document.createElement('div');memBox.className='shadow-box';memBox.style.padding='12px';
+  (d.memoryFiles||[]).forEach(function(f){
+    var det=document.createElement('details');det.className='mem-item';
+    var sum=document.createElement('summary');var sn=document.createElement('span');sn.textContent=f.name;
+    var ss=document.createElement('span');ss.textContent=f.size+' chars';ss.style.cssText='color:var(--text-muted);font-size:11px';
+    sum.append(sn,ss);var pre=document.createElement('pre');pre.textContent=f.preview+(f.size>200?'...':'');
+    det.append(sum,pre);memBox.append(det);
+  });
+  if(!(d.memoryFiles||[]).length){var memEmpty=document.createElement('div');memEmpty.style.cssText='font-size:12px;color:var(--text-muted)';memEmpty.textContent='暂无记忆文件';memBox.append(memEmpty)}
+  memDetails.append(memSummary,memBox);memSec.append(memDetails);
+
+  // ── CLAUDE.md section (collapsible) ──
+  var mdSec=document.createElement('div');mdSec.className='detail-section';
+  if(d.claudeMd){
+    var mdDetails=document.createElement('details');
+    var mdSummary=document.createElement('summary');mdSummary.style.cssText='cursor:pointer;font-size:14px;font-weight:600;color:var(--text-bright);padding:8px 0;list-style:none;display:flex;align-items:center;gap:6px';
+    var mdArrow=document.createElement('span');mdArrow.style.cssText='font-size:10px;transition:transform .2s;display:inline-block';mdArrow.textContent='\u25B6';
+    mdSummary.append(mdArrow,document.createTextNode(' CLAUDE.md'));
+    mdDetails.addEventListener('toggle',function(){mdArrow.style.transform=mdDetails.open?'rotate(90deg)':''});
+    var mdBox=document.createElement('div');mdBox.className='shadow-box';
+    var mdPre=document.createElement('pre');mdPre.style.cssText='font-size:11px;line-height:1.5;color:var(--text-muted);white-space:pre-wrap;max-height:160px;overflow-y:auto;font-family:var(--mono);margin:0';
+    mdPre.textContent=d.claudeMd;mdBox.append(mdPre);mdDetails.append(mdSummary,mdBox);mdSec.append(mdDetails);
+  }
+
+  // ── Info section (technical, at bottom) ──
+  var infoSec=document.createElement('div');infoSec.className='detail-section';
+  var infoDetails=document.createElement('details');
+  var infoSummary=document.createElement('summary');infoSummary.style.cssText='cursor:pointer;font-size:14px;font-weight:600;color:var(--text-bright);padding:8px 0;list-style:none;display:flex;align-items:center;gap:6px';
+  var infoArrow=document.createElement('span');infoArrow.style.cssText='font-size:10px;transition:transform .2s;display:inline-block';infoArrow.textContent='\u25B6';
+  infoSummary.append(infoArrow,document.createTextNode(' 运行信息'));
+  infoDetails.addEventListener('toggle',function(){infoArrow.style.transform=infoDetails.open?'rotate(90deg)':''});
+  var infoBox=document.createElement('div');infoBox.className='shadow-box';
+  var infoGrid=document.createElement('div');infoGrid.className='info-grid';
+  [['工作目录',(d.workdir||'-').replace(new RegExp('^'+HOME_DIR+'/'),'~/')],['Bot ID',d.accountId||'-'],['User ID',d.userId||'-'],
+   ['PID',String(d.pid||'-')],['Token 时间',d.tokenSavedAt?new Date(d.tokenSavedAt).toLocaleString():'-'],
+   ['最后同步',age(d.syncBufAge)],['最后活跃',age(d.lastActivityAge)],['Context Tokens',d.contextTokenCount+'个']
+  ].forEach(function(kv){var dk=document.createElement('div');dk.className='k';dk.textContent=kv[0];var dv=document.createElement('div');dv.className='v';dv.textContent=kv[1];infoGrid.append(dk,dv)});
+  infoBox.append(infoGrid);infoDetails.append(infoSummary,infoBox);infoSec.append(infoDetails);
+
+  // ── Assemble: head → status → config → memory → claude.md → info ──
+  detail.append(head,thinBar);
+  if(loginBanner)detail.append(loginBanner);
+  detail.append(configSec,memSec);
+  if(d.claudeMd)detail.append(mdSec);
+  detail.append(infoSec);
+  m.append(detail);m.scrollTop=0;
+}
+
+async function saveConfig(){
+  var r=await(await fetch('/api/update/'+curName,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    identity:document.getElementById('dtIdentity').value,rules:document.getElementById('dtRules').value,
+    allow_from:document.getElementById('dtAllowFrom').value.split(',').map(function(s){return s.trim()}).filter(Boolean)
+  })})).json();
+  if(r.error){toast(r.error);return}
+  document.getElementById('dtSaveHint').classList.add('show');setTimeout(function(){document.getElementById('dtSaveHint').classList.remove('show')},2000);load();
+}
+async function togglePause(){
+  var url=curData&&curData.paused?'/api/resume/':'/api/pause/';
+  await fetch(url+curName,{method:'POST'});toast(curData.paused?'已恢复':'已暂停');openDetail(curName);load();
+}
+async function deleteInstance(){
+  if(!confirm('确定删除「'+curName+'」? 不可撤销。'))return;
+  var r=await(await fetch('/api/delete/'+curName,{method:'DELETE'})).json();if(r.error){toast(r.error);return}
+  toast('已删除');curName='';
+  var m=document.getElementById('main');m.textContent='';
+  var e=document.createElement('div');e.className='empty';
+  var svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('width','48');svg.setAttribute('height','48');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1');
+  var p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d','M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z');svg.append(p);
+  var txt=document.createElement('div');txt.textContent='选择左侧实例查看详情';e.append(svg,txt);m.append(e);load();
+}
+
+function showNew(){document.getElementById('newModal').classList.add('open');['s1','s2','s3'].forEach(function(s,i){document.getElementById(s).style.display=i?'none':''});document.getElementById('iName').value='';document.getElementById('iFolder').value='';setTimeout(function(){document.getElementById('iName').focus()},100)}
+function closeNew(){document.getElementById('newModal').classList.remove('open');if(T){clearInterval(T);T=null}}
+async function doCreate(){
+  var name=document.getElementById('iName').value.trim();var folder=document.getElementById('iFolder').value.trim()||name;
+  if(!name){toast('请输入名称');return}
+  var d=await(await fetch('/api/instances/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,folderName:folder})})).json();
+  if(d.error){toast(d.error);return}
+  document.getElementById('s1').style.display='none';document.getElementById('s2').style.display='';
+  document.getElementById('nQR').src='/api/qr-image/'+name;
+  T=setInterval(async function(){var s=await(await fetch('/api/qr-status/'+d.name)).json();
+    if(s.status==='scaned')document.getElementById('nSt').textContent='已扫码，请确认...';
+    else if(s.status==='confirmed'){clearInterval(T);T=null;document.getElementById('s2').style.display='none';document.getElementById('s3').style.display='';document.getElementById('nCmd').textContent=s.launchCmd}
+    else if(s.status==='expired'){
+      clearInterval(T);T=null;
+      var st=document.getElementById('nSt');
+      st.textContent='二维码已过期 ';
+      var rb=document.createElement('button');rb.className='btn btn-sm btn-primary';rb.style.marginLeft='8px';
+      rb.textContent='重新获取';rb.onclick=function(){doCreate()};
+      st.append(rb);
+    }
+  },2000);
+}
+function cpCmd(){cp(document.getElementById('nCmd').textContent)}
+async function rescan(name){
+  document.getElementById('rsModal').classList.add('open');document.getElementById('rsName').textContent=name;
+  document.getElementById('rsSt').textContent='获取二维码...';document.getElementById('rsQR').src='';
+  var d=await(await fetch('/api/rescan/'+name,{method:'POST'})).json();if(d.error){toast(d.error);return}
+  document.getElementById('rsQR').src='/api/qr-image/'+name;
+  document.getElementById('rsSt').textContent='请让对方用微信扫描二维码';
+  T=setInterval(async function(){var s=await(await fetch('/api/rescan-status/'+name)).json();
+    if(s.status==='scaned')document.getElementById('rsSt').textContent='已扫码，请确认...';
+    else if(s.status==='confirmed'){clearInterval(T);T=null;document.getElementById('rsSt').textContent='扫码成功!';document.getElementById('rsSt').style.color='var(--primary)'}
+    else if(s.status==='expired'){clearInterval(T);T=null;document.getElementById('rsSt').textContent='二维码已过期，正在刷新...';refreshRescanQR(name)}
+  },2000);
+}
+async function refreshRescanQR(name){
+  try{
+    var d=await(await fetch('/api/rescan/'+name,{method:'POST'})).json();if(d.error){document.getElementById('rsSt').textContent='刷新失败: '+d.error;return}
+    document.getElementById('rsQR').src='/api/qr-image/'+name;
+    document.getElementById('rsSt').textContent='新二维码已生成，请重新扫码';document.getElementById('rsSt').style.color='var(--text)';
+    T=setInterval(async function(){var s=await(await fetch('/api/rescan-status/'+name)).json();
+      if(s.status==='scaned')document.getElementById('rsSt').textContent='已扫码，请确认...';
+      else if(s.status==='confirmed'){clearInterval(T);T=null;document.getElementById('rsSt').textContent='扫码成功!';document.getElementById('rsSt').style.color='var(--primary)'}
+      else if(s.status==='expired'){clearInterval(T);T=null;document.getElementById('rsSt').textContent='二维码已过期，正在刷新...';refreshRescanQR(name)}
+    },2000);
+  }catch(e){document.getElementById('rsSt').textContent='刷新失败: '+String(e)}
+}
+function closeRs(){document.getElementById('rsModal').classList.remove('open');if(T){clearInterval(T);T=null}}
+
+// ── Wizard Logic ─────────────────────────────────────────────
+var wizStep=0, wizQRData=null, wizQRTimer=null, wizAccountData=null;
+
+var TEMPLATES={
+  general:'你是一个全能探索型助手，没有固定角色限制。用户让你做什么你就做什么。风格轻松直接，像一个什么都会的朋友。',
+  work:'你是一个专注高效的工作助手。严谨、准确、有条理。处理工作任务时会主动确认需求，给出结构化的回复。',
+  study:'你是一个耐心的学习助手。善于用简单的语言解释复杂概念，会引导用户思考而不是直接给答案。鼓励提问和探索。',
+  custom:''
+};
+
+function selectTemplate(el){
+  document.querySelectorAll('.template-card').forEach(function(c){c.classList.remove('selected')});
+  el.classList.add('selected');
+  var tpl=el.dataset.tpl;
+  document.getElementById('wizCustomIdentity').style.display=tpl==='custom'?'':'none';
+}
+
+function getSelectedTemplate(){
+  var sel=document.querySelector('.template-card.selected');
+  var tpl=sel?sel.dataset.tpl:'general';
+  if(tpl==='custom')return document.getElementById('wizIdentity').value||TEMPLATES.general;
+  return TEMPLATES[tpl]||TEMPLATES.general;
+}
+
+function setWizStep(n){
+  wizStep=n;
+  for(var i=1;i<=4;i++){
+    document.getElementById('wiz'+i).style.display=i===n?'':'none';
+    var s=document.getElementById('ws'+i);
+    s.className='wizard-step'+(i<n?' done':i===n?' current':'');
+  }
+}
+
+function makeCheckRow(name,status,detail){
+  var row=document.createElement('div');row.className='check-row';row.id='chk-'+name;
+  var icon=document.createElement('div');
+  icon.className='check-icon '+status;
+  icon.textContent=status==='ok'?'\u2713':status==='fail'?'\u2717':'...';
+  var info=document.createElement('div');info.className='check-info';
+  var nm=document.createElement('div');nm.className='check-name';nm.textContent=name;
+  var dt=document.createElement('div');dt.className='check-detail';dt.textContent=detail;
+  info.append(nm,dt);row.append(icon,info);
+  return row;
+}
+
+async function wizRunChecks(){
+  setWizStep(1);
+  var container=document.getElementById('wizChecks');
+  container.textContent='';
+  var msg=document.getElementById('wizCheckMsg');
+  msg.textContent='正在检查环境...';msg.style.color='var(--text-muted)';
+  var btn=document.getElementById('wizNextBtn');
+  btn.disabled=true;btn.textContent='检查中...';
+
+  var names=['Node.js','Claude Code','微信 API','目录权限'];
+  names.forEach(function(n){container.append(makeCheckRow(n,'loading','检查中'))});
+
+  try{
+    var data=await(await fetch('/api/check-env')).json();
+    container.textContent='';
+    data.checks.forEach(function(c){container.append(makeCheckRow(c.name,c.ok?'ok':'fail',c.detail))});
+    if(data.allOk){
+      msg.textContent='环境检查通过！';msg.style.color='var(--primary)';
+      btn.disabled=false;btn.textContent='下一步：微信扫码';
+    }else{
+      msg.textContent='部分检查未通过，请先修复上方标红项';msg.style.color='var(--red)';
+      btn.disabled=false;btn.textContent='重新检查';
+      btn.onclick=function(){btn.onclick=wizNext;wizRunChecks()};
+    }
+  }catch(e){
+    msg.textContent='检查失败: '+String(e);msg.style.color='var(--red)';
+    btn.disabled=false;btn.textContent='重试';btn.onclick=function(){btn.onclick=wizNext;wizRunChecks()};
+  }
+}
+
+async function wizStartQR(){
+  setWizStep(2);
+  var btn=document.getElementById('wizNextBtn');
+  btn.disabled=true;btn.textContent='等待扫码...';
+  var qrmsg=document.getElementById('wizQRMsg');
+  qrmsg.textContent='正在获取二维码...';qrmsg.style.color='var(--text)';
+  document.getElementById('wizQR').src='';
+
+  try{
+    var tmpName='_wizard_tmp';
+    var d=await(await fetch('/api/instances/create',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:tmpName,folderName:'_wizard_tmp'})})).json();
+    if(d.error&&d.error!=='该名称已存在'){throw new Error(d.error)}
+    if(d.error==='该名称已存在'){
+      d=await(await fetch('/api/rescan/'+tmpName,{method:'POST'})).json();
+    }
+    wizQRData=d;
+    document.getElementById('wizQR').src='/api/qr-image/_wizard_tmp';
+    qrmsg.textContent='打开微信 \u2192 扫一扫 \u2192 确认登录';
+
+    var statusUrl='/api/qr-status/'+tmpName;
+    wizQRTimer=setInterval(async function(){
+      try{
+        var s=await(await fetch(statusUrl)).json();
+        if(s.status==='scaned'){qrmsg.textContent='已扫码，请在微信中确认...';document.getElementById('wizQR').classList.remove('wizard-qr-pulse')}
+        else if(s.status==='confirmed'){
+          clearInterval(wizQRTimer);wizQRTimer=null;
+          wizAccountData={name:tmpName,workdir:d.workdir};
+          btn.disabled=false;btn.textContent='下一步：配置助手';
+        }
+        else if(s.status==='expired'){
+          clearInterval(wizQRTimer);wizQRTimer=null;
+          qrmsg.textContent='二维码已过期，正在自动刷新...';qrmsg.style.color='var(--warning)';
+          wizStartQR();
+        }
+      }catch(e){console.error(e)}
+    },2000);
+  }catch(e){
+    qrmsg.textContent='获取二维码失败: '+String(e);qrmsg.style.color='var(--red)';
+    btn.disabled=false;btn.textContent='重试';btn.onclick=function(){btn.onclick=wizNext;wizStartQR()};
+  }
+}
+
+async function wizConfigure(){
+  setWizStep(3);
+  var btn=document.getElementById('wizNextBtn');
+  btn.disabled=false;btn.textContent='创建助手';
+  var nameInput=document.getElementById('wizName');
+  nameInput.value='my-assistant';
+  document.getElementById('wizWorkdir').value='~/Documents/my-assistant';
+  nameInput.addEventListener('input',function(){
+    var n=nameInput.value.trim()||'my-assistant';
+    document.getElementById('wizWorkdir').value='~/Documents/'+n;
+  });
+}
+
+async function wizFinalize(){
+  var btn=document.getElementById('wizNextBtn');
+  btn.disabled=true;btn.textContent='配置中...';
+
+  var name=document.getElementById('wizName').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'')||'my-assistant';
+  var identity=getSelectedTemplate();
+  var workdirRaw=document.getElementById('wizWorkdir').value.trim()||('~/Documents/'+name);
+
+  try{
+    await(await fetch('/api/update/_wizard_tmp',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({identity:identity})})).json();
+
+    var rn=await(await fetch('/api/rename-profile',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({from:'_wizard_tmp',to:name,workdir:workdirRaw})})).json();
+    if(rn.error)throw new Error(rn.error);
+
+    await fetch('/api/register-mcp',{method:'POST'});
+
+    setWizStep(4);
+
+    // Auto-launch the channel process
+    var statusEl=document.getElementById('wizLaunchStatus');
+    try{
+      var launch=await(await fetch('/api/launch',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:name})})).json();
+      if(launch.ok){
+        statusEl.textContent='助手已启动，打开微信发条消息试试';
+      }else{
+        statusEl.textContent='可以在管理面板点「启动」按钮开启助手';
+        statusEl.style.color='var(--text-muted)';
+      }
+    }catch(e2){
+      statusEl.textContent='可以在管理面板点「启动」按钮开启助手';
+      statusEl.style.color='var(--text-muted)';
+    }
+
+    btn.textContent='进入管理面板';btn.disabled=false;
+  }catch(e){
+    toast('配置失败: '+String(e));
+    btn.disabled=false;btn.textContent='重试';
+  }
+}
+
+async function wizDone(){
+  var autostart=document.getElementById('wizAutostartCheck');
+  if(autostart&&autostart.checked){
+    try{await fetch('/api/install-autostart',{method:'POST'})}catch(e){console.error(e)}
+  }
+  document.getElementById('wizard').style.display='none';
+  document.querySelector('.app').style.display='';
+  load();
+}
+
+function wizNext(){
+  if(wizStep===0||wizStep===1){
+    var btn=document.getElementById('wizNextBtn');
+    if(btn.textContent.indexOf('检查')>=0){wizRunChecks();return}
+    wizStartQR();
+  }else if(wizStep===2){
+    wizConfigure();
+  }else if(wizStep===3){
+    wizFinalize();
+  }else if(wizStep===4){
+    wizDone();
+  }
+}
+
+// ── Init: decide wizard vs dashboard ─────────────────────────
+async function init(){
+  try{var info=await(await fetch('/api/info')).json();HOME_DIR=info.home||HOME_DIR}catch(e){}
+  var params=new URLSearchParams(window.location.search);
+  var forceWizard=params.has('wizard');
+
+  var instances=[];
+  try{
+    var raw=await(await fetch('/api/instances')).json();
+    instances=raw.filter(function(i){return i.name!=='default'&&i.name!=='_wizard_tmp'&&i.hasAccount});
+  }catch(e){}
+
+  if(forceWizard||instances.length===0){
+    document.getElementById('wizard').style.display='flex';
+    document.querySelector('.app').style.display='none';
+    wizRunChecks();
+  }else{
+    load();setInterval(load,10000);
+  }
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 {
   "name": "@xiaoyifu_0000/wechat-channel",
-  "version": "1.0.29",
+  "version": "1.0.30",
   "description": "WeChat Channel for Claude Code — bridge WeChat messages into Claude Code via the official iLink API",
   "type": "module",
   "main": "dist/server.js",

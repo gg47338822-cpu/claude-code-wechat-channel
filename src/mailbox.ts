@@ -10,6 +10,7 @@ import type { AccountData } from "./types.js";
 import type { ContextTokenCache } from "./state.js";
 
 const MAILBOX_PATH = path.join(process.env.HOME || "", ".claude", "mailbox.jsonl");
+const PUSHED_PATH = path.join(process.env.HOME || "", ".claude", "mailbox-pushed.jsonl");
 const POLL_INTERVAL_MS = 3_000;
 
 interface MailboxEntry {
@@ -32,7 +33,12 @@ export function startMailboxWatcher(
   contextTokens: ContextTokenCache,
   recipientId: string | null,
   log: (msg: string) => void,
+  profileName?: string,
 ): void {
+  if (profileName && profileName !== "jason") {
+    log(`mailbox-watcher: 非jason profile（${profileName}），跳过`);
+    return;
+  }
   if (!recipientId) {
     log("mailbox-watcher: 无发送目标（allow_from为空），跳过");
     return;
@@ -94,7 +100,12 @@ export function startMailboxWatcher(
 
           const text = formatMailboxMsg(entry);
           sendTextMessage(account.baseUrl, account.token, recipientId, text, ct)
-            .then(() => log(`mailbox-watcher: 已推送 [${entry.from}] ${entry.task_id || ""}`))
+            .then(() => {
+              log(`mailbox-watcher: 已推送 [${entry.from}] ${entry.task_id || ""}`);
+              try {
+                fs.appendFileSync(PUSHED_PATH, JSON.stringify({ ...entry, pushed_at: new Date().toISOString() }) + "\n");
+              } catch {}
+            })
             .catch(err => log(`mailbox-watcher: 推送失败: ${String(err)}`));
         } catch {
           // Malformed JSON line, skip silently
