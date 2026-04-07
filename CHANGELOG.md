@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.32 (2026-04-07)
+
+### Bug Fixes
+
+- **前端启动profile串台**: 启动命令改用`export WECHAT_CHANNEL_PROFILE=name`确保不被shell环境覆盖
+- **小本本读取补全**: loadSessionContext支持history-snapshot.md（jsonl提取版）作为第三备选
+- **Profile路径**: 加historySnapshotFile路径定义
+
 ## 1.0.31 (2026-04-07)
 
 ### New Features

@@ -879,16 +879,18 @@ end tell`;
         try { fs.mkdirSync(workdir, { recursive: true }); } catch {}
         ensureMcpConfig(workdir);
 
-        const cmd = `cd '${workdir}' && WECHAT_CHANNEL_PROFILE=${name} CLAUDE_ROLE=${name} ${claudePath} --dangerously-load-development-channels server:wechat`;
+        const cmd = `export WECHAT_CHANNEL_PROFILE=${name} && export CLAUDE_ROLE=${name} && cd '${workdir}' && ${claudePath} --dangerously-load-development-channels server:wechat`;
         console.log(`[dashboard] launching ${name}: ${cmd.slice(0, 80)}...`);
 
         if (process.platform === "darwin") {
           // Open a new tab in the frontmost Terminal window, run the command
+          // Use export to ensure env vars survive .zshrc sourcing
+          const escapedCmd = cmd.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
           const script = `tell application "Terminal"
 activate
 tell application "System Events" to keystroke "t" using command down
 delay 0.5
-do script "${cmd.replace(/"/g, '\\"')}" in front window
+do script "${escapedCmd}" in front window
 end tell`;
           execFileSync("osascript", ["-e", script], { timeout: 5000 });
         }

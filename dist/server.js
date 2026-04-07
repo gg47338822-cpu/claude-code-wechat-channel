@@ -64,6 +64,7 @@ function getProfilePaths(profileName2) {
     memoryDir: path.join(credentialsDir, "memory"),
     mediaDir: path.join(credentialsDir, "media"),
     sessionSnapshotFile: path.join(credentialsDir, "session-snapshot.md"),
+    historySnapshotFile: path.join(credentialsDir, "history-snapshot.md"),
     lastSessionFile: path.join(credentialsDir, "last-session.md"),
     pidFile: path.join(credentialsDir, "channel.pid"),
     syncBufFile: path.join(credentialsDir, "sync_buf.txt"),
@@ -952,8 +953,9 @@ function writeSessionSummary() {
   } catch {
   }
 }
-function loadSessionContext(snapshotFile, lastSessionFile) {
-  for (const file of [lastSessionFile, snapshotFile]) {
+function loadSessionContext(snapshotFile, lastSessionFile, historyFile) {
+  const files = [lastSessionFile, historyFile, snapshotFile].filter(Boolean);
+  for (const file of files) {
     try {
       if (fs4.existsSync(file)) {
         return fs4.readFileSync(file, "utf-8");
@@ -1410,7 +1412,7 @@ ${profileConfig.rules}
   );
   const memory = loadAllMemory(paths.memoryDir, loadProfileConfig(paths.profileConfigFile).workdir || process.env.HOME || "/");
   if (memory) parts.push("", memory);
-  const prevContext = loadSessionContext(paths.sessionSnapshotFile, paths.lastSessionFile);
+  const prevContext = loadSessionContext(paths.sessionSnapshotFile, paths.lastSessionFile, paths.historySnapshotFile);
   if (prevContext) {
     parts.push(
       "",

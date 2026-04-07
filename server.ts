@@ -139,7 +139,7 @@ function buildInstructions(): string {
   if (memory) parts.push("", memory);
 
   // Inject previous session context (survives restarts)
-  const prevContext = loadSessionContext(paths.sessionSnapshotFile, paths.lastSessionFile);
+  const prevContext = loadSessionContext(paths.sessionSnapshotFile, paths.lastSessionFile, paths.historySnapshotFile);
   if (prevContext) {
     parts.push(
       "",
