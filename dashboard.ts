@@ -92,7 +92,7 @@ function refreshPidCache(): void {
   if (Date.now() - pidCwdCacheTime < PID_CACHE_TTL_MS) return;
   const m = new Map<number, string>();
   try {
-    const pids = execFileSync("/usr/bin/pgrep", ["-f", "WECHAT_CHANNEL_PROFILE|wechat-channel"], {
+    const pids = execFileSync("/usr/bin/pgrep", ["-f", "wechat-channel|server:wechat"], {
       encoding: "utf-8", timeout: 3000,
     }).trim().split("\n").map(Number).filter(Boolean);
 
@@ -166,10 +166,37 @@ function resolveWorkdir(raw: string, instanceName?: string): string {
 function findProcessByWorkdir(workdir: string): number | null {
   refreshPidCache();
   const resolved = path.resolve(workdir);
+  // Collect all matching PIDs, return lowest (parent/claude CLI, not child/server.js)
+  let best: number | null = null;
   for (const [pid, cwd] of pidCwdCache) {
-    if (path.resolve(cwd) === resolved) return pid;
+    if (path.resolve(cwd) === resolved) {
+      if (best === null || pid < best) best = pid;
+    }
   }
-  return null;
+  return best;
+}
+
+/** Find claude CLI PID via channel.pid file (most reliable method) */
+function findProcessByPidFile(profileName: string): number | null {
+  const pidFile = path.join(PROFILES_DIR, profileName, "channel.pid");
+  try {
+    const serverPid = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
+    if (!serverPid || isNaN(serverPid)) return null;
+    // Verify server.js is alive
+    try { process.kill(serverPid, 0); } catch { return null; }
+    // Get parent PID (claude CLI)
+    try {
+      const ppid = parseInt(
+        execFileSync("ps", ["-p", String(serverPid), "-o", "ppid="], {
+          encoding: "utf-8", timeout: 2000,
+        }).trim(), 10
+      );
+      if (ppid > 1) {
+        try { process.kill(ppid, 0); return ppid; } catch { return serverPid; }
+      }
+    } catch {}
+    return serverPid; // fallback: return server.js PID itself
+  } catch { return null; }
 }
 
 function getInstanceStatus(name: string): InstanceStatus {
@@ -211,8 +238,12 @@ function getInstanceStatus(name: string): InstanceStatus {
   } catch { base.lastActivityAge = null; }
 
   base.paused = fs.existsSync(path.join(dir, "paused"));
-  const resolvedWorkdir = base.workdir ? resolveWorkdir(base.workdir, name) : "";
-  if (resolvedWorkdir) base.pid = findProcessByWorkdir(resolvedWorkdir);
+  // 优先用channel.pid找（最可靠），fallback到CWD匹配
+  base.pid = findProcessByPidFile(name);
+  if (!base.pid) {
+    const resolvedWorkdir = base.workdir ? resolveWorkdir(base.workdir, name) : "";
+    if (resolvedWorkdir) base.pid = findProcessByWorkdir(resolvedWorkdir);
+  }
 
   const ACTIVE_THRESHOLD_MS = 10 * 60 * 1000;
   if (!base.pid) {
@@ -776,14 +807,42 @@ end tell`;
       const action = (b.action || "").trim();
       console.log(`[dashboard] /api/launch called: name=${profileName} action=${action}`);
 
-      // Stop action
+      // Stop action: kill Claude CLI + all children + cleanup
       if (action === "stop" && profileName) {
         try {
           const inst = getInstanceStatus(profileName);
-          if (inst.pid) { process.kill(inst.pid, "SIGTERM"); }
+          if (inst.pid) {
+            // Find all child processes first
+            const children: number[] = [];
+            try {
+              const childPids = execFileSync("/usr/bin/pgrep", ["-P", String(inst.pid)], {
+                encoding: "utf-8", timeout: 3000,
+              }).trim().split("\n").map(Number).filter(Boolean);
+              children.push(...childPids);
+            } catch { /* no children */ }
+
+            // Kill parent (claude CLI) first
+            process.kill(inst.pid, "SIGTERM");
+            // Kill children explicitly (server.js, MCP servers)
+            for (const cpid of children) {
+              try { process.kill(cpid, "SIGTERM"); } catch {}
+            }
+            // Wait up to 5s for parent to exit
+            for (let i = 0; i < 10; i++) {
+              try { process.kill(inst.pid, 0); } catch { break; }
+              execFileSync("sleep", ["0.5"], { timeout: 2000 });
+            }
+            // Force kill parent + remaining children
+            try { process.kill(inst.pid, 0); process.kill(inst.pid, "SIGKILL"); } catch {}
+            for (const cpid of children) {
+              try { process.kill(cpid, 0); process.kill(cpid, "SIGKILL"); } catch {}
+            }
+          }
           // Also kill the tmux window
           try { execFileSync("tmux", ["kill-window", "-t", `wechat-v2:${profileName}`], { timeout: 3000 }); } catch {}
         } catch {}
+        // Invalidate PID cache so next status check is fresh
+        pidCwdCacheTime = 0;
         json(res, { ok: true }); return;
       }
 
@@ -802,8 +861,18 @@ end tell`;
       for (const name of profiles) {
         const inst = getInstanceStatus(name);
         if (inst.pid) {
-          console.log(`[dashboard] ${name} already running (pid=${inst.pid}), skipping`);
-          continue;
+          // Kill old process before launching new one
+          console.log(`[dashboard] ${name} has old process (pid=${inst.pid}), killing before relaunch`);
+          try {
+            process.kill(inst.pid, "SIGTERM");
+            for (let i = 0; i < 6; i++) {
+              try { process.kill(inst.pid, 0); } catch { break; }
+              execFileSync("sleep", ["0.5"], { timeout: 2000 });
+            }
+            try { process.kill(inst.pid, 0); process.kill(inst.pid, "SIGKILL"); } catch {}
+          } catch {}
+          // Short delay to let port/resources release
+          execFileSync("sleep", ["1"], { timeout: 3000 });
         }
 
         const workdir = resolveWorkdir(inst.workdir || "~", name);

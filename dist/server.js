@@ -1,5 +1,5 @@
 // server.ts
-import fs6 from "node:fs";
+import fs7 from "node:fs";
 import path4 from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -55,14 +55,16 @@ function resolveProfileName() {
   }
   return "default";
 }
-function getProfilePaths(profileName) {
-  const credentialsDir = path.join(CHANNELS_BASE, "profiles", profileName);
+function getProfilePaths(profileName2) {
+  const credentialsDir = path.join(CHANNELS_BASE, "profiles", profileName2);
   return {
     credentialsDir,
     credentialsFile: path.join(credentialsDir, "account.json"),
     profileConfigFile: path.join(credentialsDir, "profile.json"),
     memoryDir: path.join(credentialsDir, "memory"),
     mediaDir: path.join(credentialsDir, "media"),
+    sessionSnapshotFile: path.join(credentialsDir, "session-snapshot.md"),
+    lastSessionFile: path.join(credentialsDir, "last-session.md"),
     pidFile: path.join(credentialsDir, "channel.pid"),
     syncBufFile: path.join(credentialsDir, "sync_buf.txt"),
     contextTokenFile: path.join(credentialsDir, "context_tokens.json"),
@@ -183,6 +185,7 @@ function loadAllMemory(memoryDir, workdir) {
 
 // src/message.ts
 import crypto3 from "node:crypto";
+import { appendFileSync } from "node:fs";
 
 // src/api.ts
 import crypto from "node:crypto";
@@ -263,7 +266,7 @@ function resolveMediaDownloadInfo(obj) {
   function scan(o, depth = 0) {
     if (!o || typeof o !== "object" || depth > 4) return;
     const rec = o;
-    if (typeof rec.encrypt_query_param === "string" && rec.encrypt_query_param) {
+    if (typeof rec.encrypt_query_param === "string" && rec.encrypt_query_param && !encryptQueryParam) {
       encryptQueryParam = rec.encrypt_query_param;
     }
     if (typeof rec.aeskey === "string" && rec.aeskey && !aesKeyBase64) {
@@ -331,6 +334,17 @@ async function uploadToCdn(uploadParam, filekey, ciphertext) {
 // src/message.ts
 function extractContent(msg) {
   if (!msg.item_list?.length) return null;
+  try {
+    for (const item of msg.item_list) {
+      if (item.type !== 1) {
+        appendFileSync(
+          "/tmp/wechat-msg-debug.json",
+          JSON.stringify({ time: (/* @__PURE__ */ new Date()).toISOString(), type: item.type, item }) + "\n"
+        );
+      }
+    }
+  } catch {
+  }
   for (const item of msg.item_list) {
     switch (item.type) {
       case MSG_ITEM_TEXT: {
@@ -609,9 +623,9 @@ async function pollQRStatus(baseUrl, qrcode) {
 async function generateQRSvg(data) {
   return QRCode.toString(data, { type: "svg", width: 280, margin: 1 });
 }
-async function buildQRPageHtml(qrSvg, qrUrl, profileName) {
+async function buildQRPageHtml(qrSvg, qrUrl, profileName2) {
   return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>\u5FAE\u4FE1\u91CD\u65B0\u767B\u5F55 - ${profileName}</title>
+<html><head><meta charset="utf-8"><title>\u5FAE\u4FE1\u91CD\u65B0\u767B\u5F55 - ${profileName2}</title>
 <style>
 body{font-family:-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f5f5f5}
 .card{background:#fff;padding:40px;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);text-align:center;max-width:400px}
@@ -624,7 +638,7 @@ h2{margin:0 0 8px;color:#333}
 </style></head><body>
 <div class="card">
 <h2>\u5FAE\u4FE1\u91CD\u65B0\u767B\u5F55</h2>
-<p class="hint">Profile: ${profileName} | Token \u5DF2\u8FC7\u671F</p>
+<p class="hint">Profile: ${profileName2} | Token \u5DF2\u8FC7\u671F</p>
 <div id="qr-container">${qrSvg}</div>
 <p style="font-size:13px;color:#999">\u6216\u6253\u5F00: <a href="${qrUrl}" target="_blank">\u626B\u7801\u94FE\u63A5</a></p>
 <div id="status">\u7B49\u5F85\u626B\u7801...</div>
@@ -643,13 +657,13 @@ async function poll(){
 poll();
 </script></body></html>`;
 }
-async function doQRLoginWithWebServer(baseUrl, profileName, credentialsFile, log3) {
+async function doQRLoginWithWebServer(baseUrl, profileName2, credentialsFile, log3) {
   log3("Token \u8FC7\u671F\uFF0C\u542F\u52A8 Web \u4E8C\u7EF4\u7801...");
   let qrResp = await fetchQRCode(baseUrl);
   let currentHtml = await buildQRPageHtml(
     await generateQRSvg(qrResp.qrcode_img_content),
     qrResp.qrcode_img_content,
-    profileName
+    profileName2
   );
   let latestStatus = { status: "wait" };
   let loginResolved = false;
@@ -666,7 +680,7 @@ async function doQRLoginWithWebServer(baseUrl, profileName, credentialsFile, log
           currentHtml = await buildQRPageHtml(
             await generateQRSvg(qrResp.qrcode_img_content),
             qrResp.qrcode_img_content,
-            profileName
+            profileName2
           );
           latestStatus = { status: "wait" };
           log3("\u4E8C\u7EF4\u7801\u5DF2\u5237\u65B0");
@@ -854,28 +868,127 @@ function onBotReply(contextKey) {
 }
 
 // src/polling.ts
+import fs5 from "node:fs";
+
+// src/session-context.ts
 import fs4 from "node:fs";
+var MAX_MESSAGES = 60;
+var messages = [];
+var snapshotPath = "";
+var lastSessionPath = "";
+var profileName = "";
+function initSessionContext(opts) {
+  snapshotPath = opts.snapshotFile;
+  lastSessionPath = opts.lastSessionFile;
+  profileName = opts.profile;
+}
+function recordIncoming(sender, msgType, text) {
+  messages.push({
+    time: (/* @__PURE__ */ new Date()).toISOString(),
+    direction: "in",
+    sender,
+    msgType,
+    text: text.slice(0, 500)
+  });
+  if (messages.length > MAX_MESSAGES) messages.shift();
+  writeSnapshot();
+}
+function recordOutgoing(recipientShort, text) {
+  messages.push({
+    time: (/* @__PURE__ */ new Date()).toISOString(),
+    direction: "out",
+    sender: "bot",
+    msgType: "text",
+    text: text.slice(0, 500)
+  });
+  if (messages.length > MAX_MESSAGES) messages.shift();
+  writeSnapshot();
+}
+function formatMessages() {
+  if (messages.length === 0) return "(no messages in this session)";
+  return messages.map((m) => {
+    const time = m.time.slice(11, 19);
+    const arrow = m.direction === "in" ? ">>" : "<<";
+    const label = m.direction === "in" ? m.sender : `bot -> ${m.sender}`;
+    const typeTag = m.msgType !== "text" ? ` [${m.msgType}]` : "";
+    return `${time} ${arrow} ${label}${typeTag}: ${m.text}`;
+  }).join("\n");
+}
+function writeSnapshot() {
+  if (!snapshotPath) return;
+  try {
+    const content = [
+      `# Session Snapshot (${profileName})`,
+      `Updated: ${(/* @__PURE__ */ new Date()).toISOString()}`,
+      `Message count: ${messages.length}`,
+      "",
+      "## Recent Messages",
+      formatMessages(),
+      ""
+    ].join("\n");
+    fs4.writeFileSync(snapshotPath, content, "utf-8");
+  } catch {
+  }
+}
+function writeSessionSummary() {
+  if (!lastSessionPath || messages.length === 0) return;
+  try {
+    const first = messages[0];
+    const last = messages[messages.length - 1];
+    const content = [
+      `# Last Session Context (${profileName})`,
+      `Session period: ${first.time} ~ ${last.time}`,
+      `Total messages: ${messages.length}`,
+      "",
+      "## Full Conversation",
+      formatMessages(),
+      ""
+    ].join("\n");
+    fs4.writeFileSync(lastSessionPath, content, "utf-8");
+    try {
+      fs4.unlinkSync(snapshotPath);
+    } catch {
+    }
+  } catch {
+  }
+}
+function loadSessionContext(snapshotFile, lastSessionFile) {
+  for (const file of [lastSessionFile, snapshotFile]) {
+    try {
+      if (fs4.existsSync(file)) {
+        return fs4.readFileSync(file, "utf-8");
+      }
+    } catch {
+    }
+  }
+  return null;
+}
+function stopSessionContext() {
+  writeSessionSummary();
+}
+
+// src/polling.ts
 var MAX_CONSECUTIVE_FAILURES = 3;
 var MAX_MEDIA_FAILURES = 3;
 var BACKOFF_DELAY_MS = 3e4;
 var RETRY_DELAY_MS = 2e3;
 async function startPolling(account, deps) {
-  const { mcp: mcp2, profileName, paths: paths2, contextTokens: contextTokens2, setActiveAccount, log: log3, logError: logError2 } = deps;
+  const { mcp: mcp2, profileName: profileName2, paths: paths2, contextTokens: contextTokens2, setActiveAccount, log: log3, logError: logError2 } = deps;
   let { baseUrl, token } = account;
   let getUpdatesBuf = "";
   let consecutiveFailures = 0;
   let consecutiveMediaFailures = 0;
   let mcpFailures = 0;
   try {
-    if (fs4.existsSync(paths2.syncBufFile)) {
-      getUpdatesBuf = fs4.readFileSync(paths2.syncBufFile, "utf-8");
+    if (fs5.existsSync(paths2.syncBufFile)) {
+      getUpdatesBuf = fs5.readFileSync(paths2.syncBufFile, "utf-8");
       log3(`\u6062\u590D\u540C\u6B65\u72B6\u6001 (${getUpdatesBuf.length} bytes)`);
     }
   } catch {
   }
   function reloadAccountIfChanged() {
     try {
-      const raw = JSON.parse(fs4.readFileSync(paths2.credentialsFile, "utf-8"));
+      const raw = JSON.parse(fs5.readFileSync(paths2.credentialsFile, "utf-8"));
       if (raw.token && raw.token !== token) {
         log3("\u68C0\u6D4B\u5230 token \u66F4\u65B0");
         token = raw.token;
@@ -896,10 +1009,12 @@ async function startPolling(account, deps) {
     }
   }
   process.stdin.on("end", () => {
-    sendExitNotification(`[${profileName}] Claude CLI \u5DF2\u65AD\u5F00`).finally(() => process.exit(0));
+    log3(`\u3010${profileName2}\u3011Claude CLI \u5DF2\u65AD\u5F00`);
+    process.exit(0);
   });
   process.on("SIGTERM", () => {
-    sendExitNotification(`[${profileName}] \u670D\u52A1\u5DF2\u505C\u6B62`).finally(() => process.exit(0));
+    log3(`\u3010${profileName2}\u3011\u670D\u52A1\u5DF2\u505C\u6B62`);
+    process.exit(0);
   });
   log3("\u5F00\u59CB\u76D1\u542C\u5FAE\u4FE1\u6D88\u606F...");
   while (true) {
@@ -922,13 +1037,13 @@ async function startPolling(account, deps) {
                 baseUrl,
                 token,
                 recipient,
-                `[${profileName}] Token \u8FC7\u671F\uFF0C\u9700\u8981\u91CD\u65B0\u626B\u7801\u767B\u5F55\u3002\u8BF7\u5728\u7EC8\u7AEF\u67E5\u770B\u4E8C\u7EF4\u7801\u3002`,
+                `\u3010${profileName2}\u3011Token \u8FC7\u671F\uFF0C\u9700\u8981\u91CD\u65B0\u626B\u7801\u767B\u5F55\u3002\u8BF7\u5728\u7EC8\u7AEF\u67E5\u770B\u4E8C\u7EF4\u7801\u3002`,
                 ct
               );
             }
           } catch {
           }
-          const newAccount = await doQRLoginWithWebServer(baseUrl, profileName, paths2.credentialsFile, log3);
+          const newAccount = await doQRLoginWithWebServer(baseUrl, profileName2, paths2.credentialsFile, log3);
           if (newAccount) {
             token = newAccount.token;
             baseUrl = newAccount.baseUrl;
@@ -936,7 +1051,7 @@ async function startPolling(account, deps) {
             getUpdatesBuf = "";
             contextTokens2.clear();
             try {
-              fs4.writeFileSync(paths2.syncBufFile, "", "utf-8");
+              fs5.writeFileSync(paths2.syncBufFile, "", "utf-8");
             } catch {
             }
             consecutiveFailures = 0;
@@ -945,21 +1060,7 @@ async function startPolling(account, deps) {
           }
         }
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-          try {
-            const profileConfig = loadProfileConfig(paths2.profileConfigFile);
-            const recipient = profileConfig.allow_from?.[0];
-            const ct = contextTokens2.get(recipient || "");
-            if (recipient && ct) {
-              await sendTextMessage(
-                baseUrl,
-                token,
-                recipient,
-                `[${profileName}] \u8FDE\u63A5\u5F02\u5E38\uFF0C${BACKOFF_DELAY_MS / 1e3}\u79D2\u540E\u91CD\u8BD5\u3002errmsg: ${resp.errmsg ?? "unknown"}`,
-                ct
-              );
-            }
-          } catch {
-          }
+          logError2(`\u3010${profileName2}\u3011\u8FDE\u63A5\u5F02\u5E38\uFF0C${BACKOFF_DELAY_MS / 1e3}\u79D2\u540E\u91CD\u8BD5\u3002errmsg: ${resp.errmsg ?? "unknown"}`);
           consecutiveFailures = 0;
           await new Promise((r) => setTimeout(r, BACKOFF_DELAY_MS));
         } else {
@@ -971,7 +1072,7 @@ async function startPolling(account, deps) {
       if (resp.get_updates_buf) {
         getUpdatesBuf = resp.get_updates_buf;
         try {
-          fs4.writeFileSync(paths2.syncBufFile, getUpdatesBuf, "utf-8");
+          fs5.writeFileSync(paths2.syncBufFile, getUpdatesBuf, "utf-8");
         } catch {
         }
       }
@@ -982,6 +1083,13 @@ async function startPolling(account, deps) {
         if (!extracted) continue;
         if (extracted.mediaItem) {
           const mi = extracted.mediaItem;
+          try {
+            const debugFile = `/tmp/wechat-media-debug-${profileName2}.json`;
+            const debugData = { time: (/* @__PURE__ */ new Date()).toISOString(), msgType: extracted.msgType, mediaItem: mi };
+            fs5.appendFileSync(debugFile, JSON.stringify(debugData) + "\n");
+            log3(`\u5A92\u4F53\u8C03\u8BD5: ${extracted.msgType} \u2192 ${debugFile}`);
+          } catch {
+          }
           let { encryptQueryParam, aesKeyBase64 } = resolveMediaDownloadInfo(mi);
           if (encryptQueryParam && aesKeyBase64) {
             consecutiveMediaFailures = 0;
@@ -994,7 +1102,7 @@ async function startPolling(account, deps) {
             }
           } else {
             consecutiveMediaFailures++;
-            logError2(`\u5A92\u4F53\u6570\u636E\u7F3A\u5931 (${consecutiveMediaFailures}/${MAX_MEDIA_FAILURES}): ${extracted.msgType} \u65E0 encrypt_query_param/aes_key`);
+            logError2(`\u5A92\u4F53\u6570\u636E\u7F3A\u5931 (${consecutiveMediaFailures}/${MAX_MEDIA_FAILURES}): ${extracted.msgType} \u65E0 encrypt_query_param/aes_key, keys=[${Object.keys(mi).join(",")}]`);
             if (consecutiveMediaFailures >= MAX_MEDIA_FAILURES) {
               log3("\u5A92\u4F53 token \u53EF\u80FD\u5DF2\u964D\u7EA7\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u65B0\u767B\u5F55...");
               try {
@@ -1004,13 +1112,13 @@ async function startPolling(account, deps) {
                     baseUrl,
                     token,
                     msg.from_user_id,
-                    `[${profileName}] \u5A92\u4F53\u6743\u9650\u8FC7\u671F\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u65B0\u767B\u5F55\uFF0C\u8BF7\u7A0D\u5019...`,
+                    `\u3010${profileName2}\u3011\u5A92\u4F53\u6743\u9650\u8FC7\u671F\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u65B0\u767B\u5F55\uFF0C\u8BF7\u7A0D\u5019...`,
                     ct
                   );
                 }
               } catch {
               }
-              const newAccount = await doQRLoginWithWebServer(baseUrl, profileName, paths2.credentialsFile, log3);
+              const newAccount = await doQRLoginWithWebServer(baseUrl, profileName2, paths2.credentialsFile, log3);
               if (newAccount) {
                 token = newAccount.token;
                 baseUrl = newAccount.baseUrl;
@@ -1024,7 +1132,7 @@ async function startPolling(account, deps) {
                       baseUrl,
                       token,
                       msg.from_user_id,
-                      `[${profileName}] \u91CD\u65B0\u767B\u5F55\u6210\u529F\uFF0C\u540E\u7EED\u5A92\u4F53\u6D88\u606F\u6062\u590D\u6B63\u5E38\u3002\u521A\u624D\u7684${extracted.msgType}\u8BF7\u91CD\u65B0\u53D1\u9001\u3002`,
+                      `\u3010${profileName2}\u3011\u91CD\u65B0\u767B\u5F55\u6210\u529F\uFF0C\u540E\u7EED\u5A92\u4F53\u6D88\u606F\u6062\u590D\u6B63\u5E38\u3002\u521A\u624D\u7684${extracted.msgType}\u8BF7\u91CD\u65B0\u53D1\u9001\u3002`,
                       ct
                     );
                   }
@@ -1064,12 +1172,13 @@ async function startPolling(account, deps) {
         const senderShort = senderId.split("@")[0] || senderId;
         log3(`\u6536\u5230${isGroup ? "\u7FA4" : "\u79C1"}\u6D88\u606F [${extracted.msgType}]: from=${senderShort} can_reply=${canReply}`);
         try {
-          fs4.writeFileSync(paths2.lastActivityFile, String(Date.now()));
+          fs5.writeFileSync(paths2.lastActivityFile, String(Date.now()));
         } catch {
         }
         if (canReply && msg.context_token) {
           onUserMessage(baseUrl, token, senderId, msg.context_token, contextKey);
         }
+        recordIncoming(senderShort, extracted.msgType, extracted.text);
         const meta = {
           sender: senderShort,
           sender_id: isGroup ? groupId : senderId,
@@ -1100,21 +1209,7 @@ async function startPolling(account, deps) {
       consecutiveFailures++;
       logError2(`\u6D88\u606F\u63A5\u6536\u5F02\u5E38: ${String(err)}`);
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-        try {
-          const profileConfig = loadProfileConfig(paths2.profileConfigFile);
-          const recipient = profileConfig.allow_from?.[0];
-          const ct = contextTokens2.get(recipient || "");
-          if (recipient && ct) {
-            await sendTextMessage(
-              baseUrl,
-              token,
-              recipient,
-              `[${profileName}] \u8F6E\u8BE2\u5F02\u5E38\uFF0C${BACKOFF_DELAY_MS / 1e3}\u79D2\u540E\u91CD\u8BD5: ${String(err).slice(0, 100)}`,
-              ct
-            );
-          }
-        } catch {
-        }
+        logError2(`\u3010${profileName2}\u3011\u8F6E\u8BE2\u5F02\u5E38\uFF0C${BACKOFF_DELAY_MS / 1e3}\u79D2\u540E\u91CD\u8BD5: ${String(err).slice(0, 100)}`);
         consecutiveFailures = 0;
         await new Promise((r) => setTimeout(r, BACKOFF_DELAY_MS));
       } else {
@@ -1125,18 +1220,18 @@ async function startPolling(account, deps) {
 }
 
 // src/mailbox.ts
-import fs5 from "node:fs";
+import fs6 from "node:fs";
 import path3 from "node:path";
 var MAILBOX_PATH = path3.join(process.env.HOME || "", ".claude", "mailbox.jsonl");
 var PUSHED_PATH = path3.join(process.env.HOME || "", ".claude", "mailbox-pushed.jsonl");
 var POLL_INTERVAL_MS = 3e3;
 function formatMailboxMsg(entry) {
-  const prefix = entry.level === "error" ? "[\u7D27\u6025] " : "";
-  return `${prefix}[${entry.from}] ${entry.msg}`;
+  const prefix = entry.level === "error" ? "\u3010\u7D27\u6025\u3011" : "";
+  return `${prefix}\u3010${entry.from}\u3011${entry.msg}`;
 }
-function startMailboxWatcher(getAccount, contextTokens2, recipientId, log3, profileName) {
-  if (profileName && profileName !== "jason") {
-    log3(`mailbox-watcher: \u975Ejason profile\uFF08${profileName}\uFF09\uFF0C\u8DF3\u8FC7`);
+function startMailboxWatcher(getAccount, contextTokens2, recipientId, log3, profileName2) {
+  if (profileName2 && profileName2 !== "jason") {
+    log3(`mailbox-watcher: \u975Ejason profile\uFF08${profileName2}\uFF09\uFF0C\u8DF3\u8FC7`);
     return;
   }
   if (!recipientId) {
@@ -1145,8 +1240,8 @@ function startMailboxWatcher(getAccount, contextTokens2, recipientId, log3, prof
   }
   let offset = 0;
   try {
-    if (fs5.existsSync(MAILBOX_PATH)) {
-      const stat = fs5.statSync(MAILBOX_PATH);
+    if (fs6.existsSync(MAILBOX_PATH)) {
+      const stat = fs6.statSync(MAILBOX_PATH);
       offset = stat.size;
     }
   } catch {
@@ -1154,16 +1249,16 @@ function startMailboxWatcher(getAccount, contextTokens2, recipientId, log3, prof
   log3(`mailbox-watcher: \u542F\u52A8\u76D1\u542C (offset=${offset})`);
   const timer = setInterval(() => {
     try {
-      if (!fs5.existsSync(MAILBOX_PATH)) return;
-      const stat = fs5.statSync(MAILBOX_PATH);
+      if (!fs6.existsSync(MAILBOX_PATH)) return;
+      const stat = fs6.statSync(MAILBOX_PATH);
       if (stat.size < offset) {
         offset = 0;
       }
       if (stat.size <= offset) return;
-      const fd = fs5.openSync(MAILBOX_PATH, "r");
+      const fd = fs6.openSync(MAILBOX_PATH, "r");
       const buf = Buffer.alloc(stat.size - offset);
-      fs5.readSync(fd, buf, 0, buf.length, offset);
-      fs5.closeSync(fd);
+      fs6.readSync(fd, buf, 0, buf.length, offset);
+      fs6.closeSync(fd);
       offset = stat.size;
       const newContent = buf.toString("utf-8");
       const lines = newContent.split("\n").filter((l) => l.trim());
@@ -1185,7 +1280,7 @@ function startMailboxWatcher(getAccount, contextTokens2, recipientId, log3, prof
           sendTextMessage(account.baseUrl, account.token, recipientId, text, ct).then(() => {
             log3(`mailbox-watcher: \u5DF2\u63A8\u9001 [${entry.from}] ${entry.task_id || ""}`);
             try {
-              fs5.appendFileSync(PUSHED_PATH, JSON.stringify({ ...entry, pushed_at: (/* @__PURE__ */ new Date()).toISOString() }) + "\n");
+              fs6.appendFileSync(PUSHED_PATH, JSON.stringify({ ...entry, pushed_at: (/* @__PURE__ */ new Date()).toISOString() }) + "\n");
             } catch {
             }
           }).catch((err) => log3(`mailbox-watcher: \u63A8\u9001\u5931\u8D25: ${String(err)}`));
@@ -1204,7 +1299,10 @@ var PROFILE_NAME = resolveProfileName();
 var paths = getProfilePaths(PROFILE_NAME);
 ensureDirectories(paths);
 var lockResult = acquireLock(paths.pidFile);
-process.on("exit", () => releaseLock(paths.pidFile));
+process.on("exit", () => {
+  stopSessionContext();
+  releaseLock(paths.pidFile);
+});
 cleanOldMedia(paths.mediaDir);
 var contextTokens = new ContextTokenCache(paths.contextTokenFile);
 function log2(msg) {
@@ -1217,7 +1315,7 @@ function logError(msg) {
 }
 function buildInstructions() {
   const profileConfig = loadProfileConfig(paths.profileConfigFile);
-  const hasCredentials = fs6.existsSync(paths.credentialsFile);
+  const hasCredentials = fs7.existsSync(paths.credentialsFile);
   const parts = [];
   if (!hasCredentials) {
     parts.push(
@@ -1312,6 +1410,15 @@ ${profileConfig.rules}
   );
   const memory = loadAllMemory(paths.memoryDir, loadProfileConfig(paths.profileConfigFile).workdir || process.env.HOME || "/");
   if (memory) parts.push("", memory);
+  const prevContext = loadSessionContext(paths.sessionSnapshotFile, paths.lastSessionFile);
+  if (prevContext) {
+    parts.push(
+      "",
+      "## Previous Session Context (IMPORTANT \u2014 read this to continue where you left off)",
+      "",
+      prevContext
+    );
+  }
   return parts.join("\n");
 }
 var mcp = new Server(
@@ -1393,7 +1500,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         const allowList = config.allow_from ?? [];
         if (!allowList.includes(account.userId)) {
           config.allow_from = [account.userId, ...allowList];
-          fs6.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
+          fs7.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
           log2(`\u767D\u540D\u5355\u5DF2\u81EA\u52A8\u6DFB\u52A0\u626B\u7801\u7528\u6237: ${account.userId}`);
         }
       }
@@ -1423,7 +1530,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name === "wechat_status") {
     const lastActivity = (() => {
       try {
-        return fs6.readFileSync(paths.lastActivityFile, "utf-8").trim();
+        return fs7.readFileSync(paths.lastActivityFile, "utf-8").trim();
       } catch {
         return null;
       }
@@ -1457,6 +1564,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
       await sendTextMessage(baseUrl, token, senderId, text, ct);
       onBotReply(senderId);
+      recordOutgoing(senderId.split("@")[0] || senderId, text);
       return { content: [{ type: "text", text: "sent" }] };
     }
     if (req.params.name === "wechat_send_image" || req.params.name === "wechat_send_file") {
@@ -1466,13 +1574,13 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
       let filePath;
       try {
-        filePath = fs6.realpathSync(path4.resolve(rawPath));
+        filePath = fs7.realpathSync(path4.resolve(rawPath));
       } catch {
         return { content: [{ type: "text", text: `\u274C \u6587\u4EF6\u4E0D\u5B58\u5728: ${path4.basename(rawPath)}` }] };
       }
       const allowedRoots = [process.cwd(), process.env.HOME || "", paths.mediaDir].filter(Boolean).map((p) => {
         try {
-          return fs6.realpathSync(p);
+          return fs7.realpathSync(p);
         } catch {
           return path4.resolve(p);
         }
@@ -1480,10 +1588,10 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       if (!allowedRoots.some((root) => filePath.startsWith(root + path4.sep) || filePath === root)) {
         return { content: [{ type: "text", text: "\u274C \u6587\u4EF6\u8DEF\u5F84\u4E0D\u5728\u5141\u8BB8\u8303\u56F4\u5185" }] };
       }
-      const stat = fs6.statSync(filePath);
+      const stat = fs7.statSync(filePath);
       const maxSize = req.params.name === "wechat_send_image" ? 10 * 1024 * 1024 : 20 * 1024 * 1024;
       if (stat.size > maxSize) return { content: [{ type: "text", text: `\u274C \u6587\u4EF6\u592A\u5927\uFF08\u6700\u5927 ${maxSize / 1024 / 1024}MB\uFF09` }] };
-      const buf = fs6.readFileSync(filePath);
+      const buf = fs7.readFileSync(filePath);
       if (req.params.name === "wechat_send_image") {
         await sendImageMessage(baseUrl, token, senderId, buf, ct);
       } else {
@@ -1514,7 +1622,7 @@ async function main() {
       const allowList = config.allow_from ?? [];
       if (!allowList.includes(account2.userId)) {
         config.allow_from = [account2.userId, ...allowList];
-        fs6.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
+        fs7.writeFileSync(paths.profileConfigFile, JSON.stringify(config, null, 2), "utf-8");
         log2(`\u767D\u540D\u5355\u5DF2\u81EA\u52A8\u6DFB\u52A0\u626B\u7801\u7528\u6237: ${account2.userId}`);
       }
     }
@@ -1527,7 +1635,7 @@ async function main() {
   let account = loadCredentials(paths.credentialsFile);
   const lastActivity = (() => {
     try {
-      return fs6.readFileSync(paths.lastActivityFile, "utf-8").trim();
+      return fs7.readFileSync(paths.lastActivityFile, "utf-8").trim();
     } catch {
       return null;
     }
@@ -1558,6 +1666,11 @@ async function main() {
   }
   log2(`\u4F7F\u7528\u5DF2\u4FDD\u5B58\u8D26\u53F7: ${account.accountId}`);
   activeAccount = account;
+  initSessionContext({
+    snapshotFile: paths.sessionSnapshotFile,
+    lastSessionFile: paths.lastSessionFile,
+    profile: PROFILE_NAME
+  });
   const mailboxRecipient = profileConfig.allow_from?.[0] ?? null;
   startMailboxWatcher(() => activeAccount, contextTokens, mailboxRecipient, log2, PROFILE_NAME);
   await startPolling(account, {

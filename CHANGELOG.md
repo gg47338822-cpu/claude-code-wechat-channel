@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.0.31 (2026-04-07)
+
+### New Features
+
+- **Session Context 模块**: 新增 `session-context.ts`，实时记录对话到小本本（环形缓冲60条消息）
+- **小本本 jsonl 提取**: 新增 `scripts/snapshot-from-jsonl.js` Stop hook，从 jsonl 跨文件提取最近30次对谈写 history-snapshot.md
+- **Session 注册表**: 每个 profile 维护 session-registry.json，精确追踪属于该 profile 的 jsonl 文件
+
+### Bug Fixes
+
+- **通知前缀中文化**: 所有面向用户的通知前缀从 `[profileName]` 改为 `【profileName】`
+- **Mailbox 格式**: `[紧急] [分身名]` 改为 `【紧急】【分身名】`
+- **Dashboard 停止后自动刷新**: closeRestart 和 Step2 切换前都加了 load()
+- **媒体 debug 日志**: extractContent 入口 dump 非文本消息到 /tmp（临时，排查视频问题用）
+- **媒体失败日志增强**: 输出 mediaItem 的 keys 列表辅助排查
+- **Profile 匹配优化**: 精确匹配优先于子目录，避免 home 目录兜底导致串 profile
+- **ESM 兼容**: statSync 改用顶部 import
+
+### Changes
+
+- **退出通知改为静默**: CLI 断开/服务停止不再发微信，只记日志（避免技术消息困扰用户）
+- **Mailbox watcher 仅 jason profile**: 非 jason profile 跳过，避免多实例重复推送
+
 ## 1.0.30 (2026-04-05)
 
 ### New Features

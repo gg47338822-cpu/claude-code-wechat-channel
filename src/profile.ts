@@ -45,6 +45,8 @@ export function getProfilePaths(profileName: string) {
     profileConfigFile: path.join(credentialsDir, "profile.json"),
     memoryDir: path.join(credentialsDir, "memory"),
     mediaDir: path.join(credentialsDir, "media"),
+    sessionSnapshotFile: path.join(credentialsDir, "session-snapshot.md"),
+    lastSessionFile: path.join(credentialsDir, "last-session.md"),
     pidFile: path.join(credentialsDir, "channel.pid"),
     syncBufFile: path.join(credentialsDir, "sync_buf.txt"),
     contextTokenFile: path.join(credentialsDir, "context_tokens.json"),

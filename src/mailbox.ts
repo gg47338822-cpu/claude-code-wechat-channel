@@ -24,8 +24,8 @@ interface MailboxEntry {
 }
 
 function formatMailboxMsg(entry: MailboxEntry): string {
-  const prefix = entry.level === "error" ? "[紧急] " : "";
-  return `${prefix}[${entry.from}] ${entry.msg}`;
+  const prefix = entry.level === "error" ? "【紧急】" : "";
+  return `${prefix}【${entry.from}】${entry.msg}`;
 }
 
 export function startMailboxWatcher(

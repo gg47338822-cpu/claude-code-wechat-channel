@@ -3,6 +3,7 @@
  */
 
 import crypto from "node:crypto";
+import { appendFileSync } from "node:fs";
 import { apiFetch } from "./api.js";
 import { encryptAesEcb } from "./crypto.js";
 import { getUploadUrl, uploadToCdn } from "./cdn.js";
@@ -17,6 +18,16 @@ import {
 
 export function extractContent(msg: WeixinMessage): ExtractedContent | null {
   if (!msg.item_list?.length) return null;
+
+  // Debug: dump raw items for video investigation
+  try {
+    for (const item of msg.item_list) {
+      if (item.type !== 1) { // skip text, dump everything else
+        appendFileSync("/tmp/wechat-msg-debug.json",
+          JSON.stringify({ time: new Date().toISOString(), type: item.type, item }) + "\n");
+      }
+    }
+  } catch {}
 
   for (const item of msg.item_list) {
     switch (item.type) {

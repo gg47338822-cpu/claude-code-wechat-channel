@@ -16,6 +16,7 @@ import { doQRLogin, doQRLoginWithWebServer } from "./src/login.js";
 import { ContextTokenCache, onBotReply } from "./src/state.js";
 import { startPolling } from "./src/polling.js";
 import { startMailboxWatcher } from "./src/mailbox.js";
+import { initSessionContext, recordOutgoing, stopSessionContext, loadSessionContext } from "./src/session-context.js";
 
 // ── Profile resolution ─────────────────────────────────────────────────────
 
@@ -23,7 +24,10 @@ const PROFILE_NAME = resolveProfileName();
 const paths = getProfilePaths(PROFILE_NAME);
 ensureDirectories(paths);
 const lockResult = acquireLock(paths.pidFile);
-process.on("exit", () => releaseLock(paths.pidFile));
+process.on("exit", () => {
+  stopSessionContext();
+  releaseLock(paths.pidFile);
+});
 cleanOldMedia(paths.mediaDir);
 
 const contextTokens = new ContextTokenCache(paths.contextTokenFile);
@@ -133,6 +137,17 @@ function buildInstructions(): string {
 
   const memory = loadAllMemory(paths.memoryDir, loadProfileConfig(paths.profileConfigFile).workdir || process.env.HOME || "/");
   if (memory) parts.push("", memory);
+
+  // Inject previous session context (survives restarts)
+  const prevContext = loadSessionContext(paths.sessionSnapshotFile, paths.lastSessionFile);
+  if (prevContext) {
+    parts.push(
+      "",
+      "## Previous Session Context (IMPORTANT — read this to continue where you left off)",
+      "",
+      prevContext,
+    );
+  }
 
   return parts.join("\n");
 }
@@ -284,6 +299,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
       await sendTextMessage(baseUrl, token, senderId, text, ct);
       onBotReply(senderId);
+      recordOutgoing(senderId.split("@")[0] || senderId, text);
       return { content: [{ type: "text" as const, text: "sent" }] };
     }
     if (req.params.name === "wechat_send_image" || req.params.name === "wechat_send_file") {
@@ -390,6 +406,13 @@ async function main() {
 
   log(`使用已保存账号: ${account.accountId}`);
   activeAccount = account;
+
+  // Init session context tracking
+  initSessionContext({
+    snapshotFile: paths.sessionSnapshotFile,
+    lastSessionFile: paths.lastSessionFile,
+    profile: PROFILE_NAME,
+  });
 
   // Start mailbox watcher (forwards分身notifications to Jason's WeChat)
   const mailboxRecipient = profileConfig.allow_from?.[0] ?? null;

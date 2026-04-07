@@ -40,7 +40,7 @@ function refreshPidCache() {
   if (Date.now() - pidCwdCacheTime < PID_CACHE_TTL_MS) return;
   const m = /* @__PURE__ */ new Map();
   try {
-    const pids = execFileSync("/usr/bin/pgrep", ["-f", "WECHAT_CHANNEL_PROFILE|wechat-channel"], {
+    const pids = execFileSync("/usr/bin/pgrep", ["-f", "wechat-channel|server:wechat"], {
       encoding: "utf-8",
       timeout: 3e3
     }).trim().split("\n").map(Number).filter(Boolean);
@@ -111,10 +111,46 @@ function resolveWorkdir(raw, instanceName) {
 function findProcessByWorkdir(workdir) {
   refreshPidCache();
   const resolved = path.resolve(workdir);
+  let best = null;
   for (const [pid, cwd] of pidCwdCache) {
-    if (path.resolve(cwd) === resolved) return pid;
+    if (path.resolve(cwd) === resolved) {
+      if (best === null || pid < best) best = pid;
+    }
   }
-  return null;
+  return best;
+}
+function findProcessByPidFile(profileName) {
+  const pidFile = path.join(PROFILES_DIR, profileName, "channel.pid");
+  try {
+    const serverPid = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
+    if (!serverPid || isNaN(serverPid)) return null;
+    try {
+      process.kill(serverPid, 0);
+    } catch {
+      return null;
+    }
+    try {
+      const ppid = parseInt(
+        execFileSync("ps", ["-p", String(serverPid), "-o", "ppid="], {
+          encoding: "utf-8",
+          timeout: 2e3
+        }).trim(),
+        10
+      );
+      if (ppid > 1) {
+        try {
+          process.kill(ppid, 0);
+          return ppid;
+        } catch {
+          return serverPid;
+        }
+      }
+    } catch {
+    }
+    return serverPid;
+  } catch {
+    return null;
+  }
 }
 function getInstanceStatus(name) {
   const dir = path.join(PROFILES_DIR, name);
@@ -164,8 +200,11 @@ function getInstanceStatus(name) {
     base.lastActivityAge = null;
   }
   base.paused = fs.existsSync(path.join(dir, "paused"));
-  const resolvedWorkdir = base.workdir ? resolveWorkdir(base.workdir, name) : "";
-  if (resolvedWorkdir) base.pid = findProcessByWorkdir(resolvedWorkdir);
+  base.pid = findProcessByPidFile(name);
+  if (!base.pid) {
+    const resolvedWorkdir = base.workdir ? resolveWorkdir(base.workdir, name) : "";
+    if (resolvedWorkdir) base.pid = findProcessByWorkdir(resolvedWorkdir);
+  }
   const ACTIVE_THRESHOLD_MS = 10 * 60 * 1e3;
   if (!base.pid) {
     base.status = "offline";
@@ -746,7 +785,42 @@ end tell`;
         try {
           const inst = getInstanceStatus(profileName);
           if (inst.pid) {
+            const children = [];
+            try {
+              const childPids = execFileSync("/usr/bin/pgrep", ["-P", String(inst.pid)], {
+                encoding: "utf-8",
+                timeout: 3e3
+              }).trim().split("\n").map(Number).filter(Boolean);
+              children.push(...childPids);
+            } catch {
+            }
             process.kill(inst.pid, "SIGTERM");
+            for (const cpid of children) {
+              try {
+                process.kill(cpid, "SIGTERM");
+              } catch {
+              }
+            }
+            for (let i = 0; i < 10; i++) {
+              try {
+                process.kill(inst.pid, 0);
+              } catch {
+                break;
+              }
+              execFileSync("sleep", ["0.5"], { timeout: 2e3 });
+            }
+            try {
+              process.kill(inst.pid, 0);
+              process.kill(inst.pid, "SIGKILL");
+            } catch {
+            }
+            for (const cpid of children) {
+              try {
+                process.kill(cpid, 0);
+                process.kill(cpid, "SIGKILL");
+              } catch {
+              }
+            }
           }
           try {
             execFileSync("tmux", ["kill-window", "-t", `wechat-v2:${profileName}`], { timeout: 3e3 });
@@ -754,6 +828,7 @@ end tell`;
           }
         } catch {
         }
+        pidCwdCacheTime = 0;
         json(res, { ok: true });
         return;
       }
@@ -770,8 +845,25 @@ end tell`;
       for (const name of profiles) {
         const inst = getInstanceStatus(name);
         if (inst.pid) {
-          console.log(`[dashboard] ${name} already running (pid=${inst.pid}), skipping`);
-          continue;
+          console.log(`[dashboard] ${name} has old process (pid=${inst.pid}), killing before relaunch`);
+          try {
+            process.kill(inst.pid, "SIGTERM");
+            for (let i = 0; i < 6; i++) {
+              try {
+                process.kill(inst.pid, 0);
+              } catch {
+                break;
+              }
+              execFileSync("sleep", ["0.5"], { timeout: 2e3 });
+            }
+            try {
+              process.kill(inst.pid, 0);
+              process.kill(inst.pid, "SIGKILL");
+            } catch {
+            }
+          } catch {
+          }
+          execFileSync("sleep", ["1"], { timeout: 3e3 });
         }
         const workdir = resolveWorkdir(inst.workdir || "~", name);
         try {

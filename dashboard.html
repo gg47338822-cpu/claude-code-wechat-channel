@@ -343,7 +343,7 @@ function showRestart(){
     info.append(name,detail);row.append(dot,info);container.append(row);
   });
 }
-function closeRestart(){document.getElementById('restartModal').classList.remove('open')}
+async function closeRestart(){document.getElementById('restartModal').classList.remove('open');await load()}
 
 function addRestartLog(text,type){
   var log=document.getElementById('restartLog');
@@ -392,6 +392,7 @@ async function doRestart(){
   }catch(e){updateLastLog('检查失败','fail')}
 
   await new Promise(function(r){setTimeout(r,800)});
+  load(); // 自动刷新背后的实例列表
   document.getElementById('restartStep1').style.display='none';
   document.getElementById('restartStep2').style.display='';
 
@@ -513,7 +514,7 @@ async function openDetail(name){
       stopBtn.disabled=true;stopBtn.textContent='停止中...';
       try{
         var r=await(await fetch('/api/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:d.name,action:'stop'})})).json();
-        toast('已停止');setTimeout(function(){load();showDetail(d.name)},1000);
+        toast('已停止');setTimeout(async function(){await load();openDetail(d.name)},1000);
       }catch(e){toast('停止失败: '+e)}
     });
     headRight.append(stopBtn);
@@ -525,7 +526,7 @@ async function openDetail(name){
       launchBtn.disabled=true;launchBtn.textContent='启动中...';
       try{
         var r=await(await fetch('/api/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:d.name})})).json();
-        if(r.ok){toast('已在 tmux wechat-v2 中启动，请 attach 后按回车确认');setTimeout(function(){load();showDetail(d.name)},3000)}
+        if(r.ok){toast('已在 tmux wechat-v2 中启动，请 attach 后按回车确认');setTimeout(async function(){await load();openDetail(d.name)},3000)}
         else{toast(r.error||'启动失败')}
       }catch(e){toast('启动失败: '+e)}
       launchBtn.disabled=false;launchBtn.textContent='启动';

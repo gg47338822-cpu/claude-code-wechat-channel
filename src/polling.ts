@@ -10,6 +10,7 @@ import { extractContent, getUpdates, sendTextMessage } from "./message.js";
 import { buildCdnDownloadUrl, resolveMediaDownloadInfo, downloadMediaToFile } from "./cdn.js";
 import { doQRLoginWithWebServer } from "./login.js";
 import { type ContextTokenCache, onUserMessage } from "./state.js";
+import { recordIncoming } from "./session-context.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -80,10 +81,13 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
   }
 
   process.stdin.on("end", () => {
-    sendExitNotification(`[${profileName}] Claude CLI 已断开`).finally(() => process.exit(0));
+    // v2: 不通知微信用户，静默退出。用户看到技术消息会困惑。
+    log(`【${profileName}】Claude CLI 已断开`);
+    process.exit(0);
   });
   process.on("SIGTERM", () => {
-    sendExitNotification(`[${profileName}] 服务已停止`).finally(() => process.exit(0));
+    log(`【${profileName}】服务已停止`);
+    process.exit(0);
   });
 
   log("开始监听微信消息...");
@@ -112,7 +116,7 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
             const ct = contextTokens.get(recipient || "");
             if (recipient && ct) {
               await sendTextMessage(baseUrl, token, recipient,
-                `[${profileName}] Token 过期，需要重新扫码登录。请在终端查看二维码。`, ct);
+                `【${profileName}】Token 过期，需要重新扫码登录。请在终端查看二维码。`, ct);
             }
           } catch { /* notification is best-effort */ }
           const newAccount = await doQRLoginWithWebServer(baseUrl, profileName, paths.credentialsFile, log);
@@ -130,16 +134,8 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
         }
 
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-          // Notify user about connection issues (best-effort)
-          try {
-            const profileConfig = loadProfileConfig(paths.profileConfigFile);
-            const recipient = profileConfig.allow_from?.[0];
-            const ct = contextTokens.get(recipient || "");
-            if (recipient && ct) {
-              await sendTextMessage(baseUrl, token, recipient,
-                `[${profileName}] 连接异常，${BACKOFF_DELAY_MS / 1000}秒后重试。errmsg: ${resp.errmsg ?? "unknown"}`, ct);
-            }
-          } catch { /* best-effort */ }
+          // v2: 不通知微信用户，只记日志
+          logError(`【${profileName}】连接异常，${BACKOFF_DELAY_MS / 1000}秒后重试。errmsg: ${resp.errmsg ?? "unknown"}`);
           consecutiveFailures = 0;
           await new Promise((r) => setTimeout(r, BACKOFF_DELAY_MS));
         } else {
@@ -164,6 +160,13 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
         // Download media (with token degradation detection)
         if (extracted.mediaItem) {
           const mi = extracted.mediaItem as Record<string, unknown>;
+          // Debug: dump raw media item to /tmp for inspection
+          try {
+            const debugFile = `/tmp/wechat-media-debug-${profileName}.json`;
+            const debugData = { time: new Date().toISOString(), msgType: extracted.msgType, mediaItem: mi };
+            fs.appendFileSync(debugFile, JSON.stringify(debugData) + "\n");
+            log(`媒体调试: ${extracted.msgType} → ${debugFile}`);
+          } catch {}
           let { encryptQueryParam, aesKeyBase64 } = resolveMediaDownloadInfo(mi);
 
           if (encryptQueryParam && aesKeyBase64) {
@@ -181,7 +184,7 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
           } else {
             // Media item present but no download info — token media permission degraded
             consecutiveMediaFailures++;
-            logError(`媒体数据缺失 (${consecutiveMediaFailures}/${MAX_MEDIA_FAILURES}): ${extracted.msgType} 无 encrypt_query_param/aes_key`);
+            logError(`媒体数据缺失 (${consecutiveMediaFailures}/${MAX_MEDIA_FAILURES}): ${extracted.msgType} 无 encrypt_query_param/aes_key, keys=[${Object.keys(mi).join(",")}]`);
 
             if (consecutiveMediaFailures >= MAX_MEDIA_FAILURES) {
               log("媒体 token 可能已降级，正在自动重新登录...");
@@ -190,7 +193,7 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
                 const ct = contextTokens.get(msg.from_user_id) || contextTokens.get(msg.group_id || "");
                 if (ct) {
                   await sendTextMessage(baseUrl, token, msg.from_user_id,
-                    `[${profileName}] 媒体权限过期，正在自动重新登录，请稍候...`, ct);
+                    `【${profileName}】媒体权限过期，正在自动重新登录，请稍候...`, ct);
                 }
               } catch { /* best-effort */ }
 
@@ -208,7 +211,7 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
                   const ct = contextTokens.get(msg.from_user_id) || contextTokens.get(msg.group_id || "");
                   if (ct) {
                     await sendTextMessage(baseUrl, token, msg.from_user_id,
-                      `[${profileName}] 重新登录成功，后续媒体消息恢复正常。刚才的${extracted.msgType}请重新发送。`, ct);
+                      `【${profileName}】重新登录成功，后续媒体消息恢复正常。刚才的${extracted.msgType}请重新发送。`, ct);
                   }
                 } catch { /* best-effort */ }
               }
@@ -254,6 +257,9 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
           onUserMessage(baseUrl, token, senderId, msg.context_token, contextKey);
         }
 
+        // Record for session context
+        recordIncoming(senderShort, extracted.msgType, extracted.text);
+
         // Dispatch to Claude
         const meta: Record<string, string> = {
           sender: senderShort,
@@ -283,15 +289,8 @@ export async function startPolling(account: AccountData, deps: PollingDeps): Pro
       consecutiveFailures++;
       logError(`消息接收异常: ${String(err)}`);
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-        try {
-          const profileConfig = loadProfileConfig(paths.profileConfigFile);
-          const recipient = profileConfig.allow_from?.[0];
-          const ct = contextTokens.get(recipient || "");
-          if (recipient && ct) {
-            await sendTextMessage(baseUrl, token, recipient,
-              `[${profileName}] 轮询异常，${BACKOFF_DELAY_MS / 1000}秒后重试: ${String(err).slice(0, 100)}`, ct);
-          }
-        } catch { /* best-effort */ }
+        // v2: 不通知微信用户，只记日志
+        logError(`【${profileName}】轮询异常，${BACKOFF_DELAY_MS / 1000}秒后重试: ${String(err).slice(0, 100)}`);
         consecutiveFailures = 0;
         await new Promise((r) => setTimeout(r, BACKOFF_DELAY_MS));
       } else {

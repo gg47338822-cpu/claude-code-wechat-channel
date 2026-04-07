@@ -30,7 +30,7 @@ export function resolveMediaDownloadInfo(obj: Record<string, unknown>): {
     if (!o || typeof o !== "object" || depth > 4) return;
     const rec = o as Record<string, unknown>;
 
-    if (typeof rec.encrypt_query_param === "string" && rec.encrypt_query_param) {
+    if (typeof rec.encrypt_query_param === "string" && rec.encrypt_query_param && !encryptQueryParam) {
       encryptQueryParam = rec.encrypt_query_param;
     }
     if (typeof rec.aeskey === "string" && rec.aeskey && !aesKeyBase64) {
